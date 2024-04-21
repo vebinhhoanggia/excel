@@ -13,7 +13,6 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +34,8 @@ import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.ss.util.CellReference;
 import org.apache.poi.ss.util.NumberToTextConverter;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.alxvn.backlog.BacklogService;
 import com.alxvn.backlog.dto.BacklogDetail;
@@ -44,6 +45,9 @@ import com.alxvn.backlog.dto.PjjyujiDetail;
  *
  */
 public class BacklogExcelUtil {
+
+	private static final Logger log = LoggerFactory.getLogger(BacklogExcelUtil.class);
+
 	private static final String columnACharacter = "A";
 	private static final String columnAnkenCharacter = "C";
 	private static final String columnScreenCharacter = "D";
@@ -76,20 +80,17 @@ public class BacklogExcelUtil {
 	private static final String templateTotalActHours = "SUM(R{rIdx}:{cName}{rIdx})";
 	private static final String templateNextDateFormula = "{preCol}+1";
 
-	private static final String templateTotalHours = "SUM({cName}{rIdxS}:{cName}{rIdxE})";
-	private static final String templateTotalHoursForPic = "SUMIF($G${rIdxS}:$G${rIdxE},$G{rIdxTarget},{cName}${rIdxS}:{cName}${rIdxE})";
-
 	private static final String scheduleTemplatePath = "templates/QDA-0222a_プロジェクト管理表.xlsm";
 
 	private static final String issuTypeSpec = "課題(委託)";
 	private static final String issuTypeBug = "バグ";
 
-	private boolean compareCellRangeAddresses(CellRangeAddress range1, CellRangeAddress range2) {
+	private boolean compareCellRangeAddresses(final CellRangeAddress range1, final CellRangeAddress range2) {
 		// Compare the first row, last row, first column, and last column
 		return range1.getFirstRow() == range2.getFirstRow() && range1.getLastRow() == range2.getLastRow();
 	}
 
-	private boolean isTotalRow(Row row) {
+	private boolean isTotalRow(final Row row) {
 		final var columnTotalIndex = CellReference.convertColStringToIndex(columnTotalCharacter);
 		return ScheduleHelper.isTotalRow(row, totalCharacter, columnTotalIndex);
 	}
@@ -141,7 +142,7 @@ public class BacklogExcelUtil {
 		// TODO
 	}
 
-	public String getCellValue(Cell cell) {
+	public String getCellValue(final Cell cell) {
 		if (cell == null) {
 			return "";
 		}
@@ -174,13 +175,13 @@ public class BacklogExcelUtil {
 		return cellValue;
 	}
 
-	private String evaluateFormulaCell(Cell cell) {
+	private String evaluateFormulaCell(final Cell cell) {
 		final var formulaEvaluator = cell.getSheet().getWorkbook().getCreationHelper().createFormulaEvaluator();
 		final var cellValue = formulaEvaluator.evaluate(cell);
 		return getCellValueFromFormulaResult(cellValue);
 	}
 
-	private String getCellValueFromFormulaResult(CellValue cellValue) {
+	private String getCellValueFromFormulaResult(final CellValue cellValue) {
 		return switch (cellValue.getCellType()) {
 		case STRING -> cellValue.getStringValue();
 		case NUMERIC -> NumberToTextConverter.toText(cellValue.getNumberValue());
@@ -192,7 +193,7 @@ public class BacklogExcelUtil {
 	/*
 	 *
 	 */
-	private void cloneRowFormat(Row sourceRow, Row newRow, FormulaEvaluator formulaEvaluator) {
+	private void cloneRowFormat(final Row sourceRow, final Row newRow) {
 		// Iterate over the cells in the source row
 		for (int column = sourceRow.getFirstCellNum(); column <= sourceRow.getLastCellNum(); column++) {
 			final var sourceCell = sourceRow.getCell(column); // Get the source cell
@@ -204,7 +205,7 @@ public class BacklogExcelUtil {
 		}
 	}
 
-	private void setAnkeNoValue(Sheet sheet, final CellRangeAddress mergeCellRange, String ankenNo) {
+	private void setAnkeNoValue(final Sheet sheet, final CellRangeAddress mergeCellRange, final String ankenNo) {
 		final var firstRow = mergeCellRange.getFirstRow();
 		final var fRow = firstRow;
 		// Create a new cell within the merged region
@@ -220,11 +221,9 @@ public class BacklogExcelUtil {
 		c.setCellValue(ankenNo);
 	}
 
-	private void insertNewRowInExistsCol(Sheet sheet, Row row, final CellRangeAddress mergeCellRange,
-			FormulaEvaluator formulaEvaluator, int numberOfRowsToShift, final String ankenNo) {
+	private void insertNewRowInExistsCol(final Sheet sheet, final Row row, final CellRangeAddress mergeCellRange,
+			final int numberOfRowsToShift, final String ankenNo) {
 		if (mergeCellRange != null) {
-			System.out.println("Cell found at row " + (row.getRowNum() + 1) + ", column " + columnAnkenCharacter
-					+ ", range: " + mergeCellRange.formatAsString());
 
 			// Lấy phạm vi của MergeCell
 			final var firstRow = mergeCellRange.getFirstRow();
@@ -270,13 +269,12 @@ public class BacklogExcelUtil {
 			// Tạo dòng mới sau khi dịch chuyển
 			for (var i = rowIndex; i <= rowIndex + numberOfRowsToShift - 1; i++) {
 				final var newRow = sheet.createRow(i);
-				cloneRowFormat(row, newRow, formulaEvaluator);
+				cloneRowFormat(row, newRow);
 			}
-			System.out.println("New row with formulas created successfully.");
 		}
 	}
 
-	private void insertNewRowBottom(Sheet sheet, Row bottomRow, FormulaEvaluator formulaEvaluator, int cntRowInsert,
+	private void insertNewRowBottom(final Sheet sheet, final Row bottomRow, final int cntRowInsert,
 			final String ankenNo) {
 
 		final var bottomRowIdx = bottomRow.getRowNum();
@@ -310,7 +308,7 @@ public class BacklogExcelUtil {
 		// Tạo dòng mới sau khi dịch chuyển
 		for (var i = bottomRowIdx; i <= bottomRowIdx + cntRowInsert - 1; i++) {
 			final var newRow = sheet.createRow(i);
-			cloneRowFormat(sourceRowFormat, newRow, formulaEvaluator);
+			cloneRowFormat(sourceRowFormat, newRow);
 		}
 		/**
 		 * Thiết lập giá trị ankenNo vào merge cell
@@ -326,17 +324,16 @@ public class BacklogExcelUtil {
 		}
 		// Set the value for the cell
 		c.setCellValue(ankenNo);
-		System.out.println("New row Bottom with formulas created successfully.");
 	}
 
-	private boolean isHeader(Row row) {
+	private boolean isHeader(final Row row) {
 		return row.getRowNum() < targetDateRowIdx;
 	}
 
-	private void addRowForInsertData(String ankenNo, Sheet sheet, List<BacklogDetail> backlogs,
-			FormulaEvaluator formulaEvaluator) {
-		final var dataFormatter = new DataFormatter();
+	private boolean addRowForExistsAnkenVal(final String ankenNo, final Sheet sheet, final List<BacklogDetail> backlogs,
+			final FormulaEvaluator formulaEvaluator) {
 		var isExists = false;
+		final var dataFormatter = new DataFormatter();
 		final Integer totalRow = backlogs.size();
 		for (final Row row : sheet) {
 			// skip xử lý khi đang đọc các dòng header
@@ -352,15 +349,12 @@ public class BacklogExcelUtil {
 				if (StringUtils.equals(ankenNo, formattedCellValue)) {
 					final var mergeCellRange = ScheduleHelper.getMergedRegionForCell(cell);
 					if (mergeCellRange != null) {
-						System.out.println("Cell found at row " + (row.getRowNum() + 1) + ", column "
-								+ columnAnkenCharacter + ", range: " + mergeCellRange.formatAsString());
 						final var totalRowsOfCurrentTicket = mergeCellRange.getLastRow() - mergeCellRange.getFirstRow()
 								+ 1;
-						final var numberOfRowsToShift = totalRow - totalRowsOfCurrentTicket; // Số lượng dòng cần dịch
-						// chuyển
+						// Số lượng dòng cần dịch chuyển
+						final var numberOfRowsToShift = totalRow - totalRowsOfCurrentTicket;
 						if (numberOfRowsToShift > 0) {
-							insertNewRowInExistsCol(sheet, row, mergeCellRange, formulaEvaluator, numberOfRowsToShift,
-									ankenNo);
+							insertNewRowInExistsCol(sheet, row, mergeCellRange, numberOfRowsToShift, ankenNo);
 						} else {
 							setAnkeNoValue(sheet, mergeCellRange, ankenNo);
 						}
@@ -370,15 +364,14 @@ public class BacklogExcelUtil {
 				}
 			}
 		}
-		if (isExists) {
-			// Cập nhật thông tin vào các row của ticket/anken
-			fillDataForRow(ankenNo, sheet, backlogs, formulaEvaluator);
-			return;
-		}
-		/*
-		 * Trường hợp chưa tồn tại row thì tìm group default sau đó thêm cho đủ row
-		 */
+		return isExists;
+	}
+
+	private boolean addRowForNewAnken(final String ankenNo, final Sheet sheet, final List<BacklogDetail> backlogs,
+			final FormulaEvaluator formulaEvaluator) {
 		var isExistsDefaultRow = false;
+		final Integer totalRow = backlogs.size();
+		final var dataFormatter = new DataFormatter();
 		for (final Row row : sheet) {
 			// skip xử lý khi đang đọc các dòng header
 			if (isHeader(row)) {
@@ -400,8 +393,7 @@ public class BacklogExcelUtil {
 						// Số lượng dòng cần dịch chuyển
 						final var numberOfRowsToShift = totalRow - totalRowsOfCurrentMergeCellBlank;
 						if (numberOfRowsToShift > 0) {
-							insertNewRowInExistsCol(sheet, row, mergeCellRange, formulaEvaluator, numberOfRowsToShift,
-									ankenNo);
+							insertNewRowInExistsCol(sheet, row, mergeCellRange, numberOfRowsToShift, ankenNo);
 						} else {
 							setAnkeNoValue(sheet, mergeCellRange, ankenNo);
 						}
@@ -411,6 +403,21 @@ public class BacklogExcelUtil {
 				}
 			}
 		}
+		return isExistsDefaultRow;
+	}
+
+	private void addRowForInsertData(final String ankenNo, final Sheet sheet, final List<BacklogDetail> backlogs,
+			final FormulaEvaluator formulaEvaluator) {
+		final var isExists = addRowForExistsAnkenVal(ankenNo, sheet, backlogs, formulaEvaluator);
+		if (isExists) {
+			// Cập nhật thông tin vào các row của ticket/anken
+			fillDataForRow(ankenNo, sheet, backlogs, formulaEvaluator);
+			return;
+		}
+		/*
+		 * Trường hợp chưa tồn tại row thì tìm group default sau đó thêm cho đủ row
+		 */
+		final var isExistsDefaultRow = addRowForNewAnken(ankenNo, sheet, backlogs, formulaEvaluator);
 		if (isExistsDefaultRow) {
 			// Cập nhật thông tin vào các row của ticket/anken
 			fillDataForRow(ankenNo, sheet, backlogs, formulaEvaluator);
@@ -419,6 +426,7 @@ public class BacklogExcelUtil {
 		/*
 		 * T/h không có default row thì tạo mới
 		 */
+		final Integer totalRow = backlogs.size();
 		Row bottomRow = null;
 		for (final Row row : sheet) {
 			if (isTotalRow(row)) {
@@ -427,42 +435,42 @@ public class BacklogExcelUtil {
 			bottomRow = row;
 		}
 		if (bottomRow != null) {
-			insertNewRowBottom(sheet, bottomRow, formulaEvaluator, totalRow, ankenNo);
+			insertNewRowBottom(sheet, bottomRow, totalRow, ankenNo);
 		}
 		// Cập nhật thông tin vào các row của ticket/anken
 		fillDataForRow(ankenNo, sheet, backlogs, formulaEvaluator);
 	}
 
-	public Date toDate(LocalDate localDate) {
+	public Date toDate(final LocalDate localDate) {
 		if (localDate == null) {
 			return null;
 		}
 		// Convert LocalDate to Date
-		var localDateTime = localDate.atStartOfDay();
-		var zonedDateTime = localDateTime.atZone(ZoneId.systemDefault());
-		var date = Date.from(zonedDateTime.toInstant());
+		final var localDateTime = localDate.atStartOfDay();
+		final var zonedDateTime = localDateTime.atZone(ZoneId.systemDefault());
+		final var date = Date.from(zonedDateTime.toInstant());
 		return date;
 	}
 
-	private String getOperation(String backlogIssueType) {
+	private String getOperation(final String backlogIssueType) {
 		if (StringUtils.isBlank(backlogIssueType)) {
 			return StringUtils.EMPTY;
 		}
 		return backlogIssueType;
 	}
 
-	private double getProgress(String backlogProgress) {
+	private double getProgress(final String backlogProgress) {
 		if (StringUtils.isBlank(backlogProgress)) {
 			return 0;
 		}
-		double value = NumberUtils.toInt(backlogProgress);
-		var percent = 0.01;
+		final double value = NumberUtils.toInt(backlogProgress);
+		final var percent = 0.01;
 
 		return value * percent;
 	}
 
-	private void fillDataForRow(String ankenNo, Sheet sheet, List<BacklogDetail> backlogs,
-			FormulaEvaluator formulaEvaluator) {
+	private void fillDataForRow(final String ankenNo, final Sheet sheet, final List<BacklogDetail> backlogs,
+			final FormulaEvaluator formulaEvaluator) {
 		final var dataFormatter = new DataFormatter();
 		for (final Row row : sheet) {
 			// skip xử lý khi đang đọc các dòng header
@@ -477,67 +485,67 @@ public class BacklogExcelUtil {
 				// Check if the value matches the desired value
 				if (StringUtils.equals(ankenNo, formattedCellValue)) {
 					final var mergeCellRange = ScheduleHelper.getMergedRegionForCell(cell);
+					var rowStart = row.getRowNum();
 					if (mergeCellRange != null) {
-						var rowStart = mergeCellRange.getFirstRow();
-						var curIdx = 0;
-						for (BacklogDetail backlogDetail : backlogs) {
-							var curRowIdx = rowStart + curIdx;
-							var curRow = sheet.getRow(curRowIdx);
-							// 工程 Operation
-							var curCel = curRow.getCell(CellReference.convertColStringToIndex(colTOperationChar));
-							curCel.setCellValue(getOperation(backlogDetail.getIssueType()));
-							// 担当 PIC
-							curCel = curRow.getCell(CellReference.convertColStringToIndex(columnPicCharacter));
-							curCel.setCellValue(backlogDetail.getMailId());
-							// ステータス Status
-//							curCel = curRow.getCell(CellReference.convertColStringToIndex(columnStatusCharacter));
-//							curCel.setCellValue(backlogDetail.getStatus());
-
-							// "予定 Schedule"
-							// 工数 Hours
-							curCel = curRow.getCell(CellReference.convertColStringToIndex(colExpectHousrChar));
-							curCel.setCellValue(Optional.ofNullable(backlogDetail.getEstimatedHours())
-									.orElse(BigDecimal.ZERO).doubleValue());
-							// 開始日 Begin
-							curCel = curRow.getCell(CellReference.convertColStringToIndex(colExpectStartYmdChar));
-							curCel.setCellValue(toDate(backlogDetail.getExpectedStartDate()));
-							// 完了日 End
-							curCel = curRow.getCell(CellReference.convertColStringToIndex(colExpectEndYmdChar));
-							curCel.setCellValue(toDate(backlogDetail.getExpectedDueDate()));
-							// 納品日 Delivery
-							curCel = curRow.getCell(CellReference.convertColStringToIndex(colExpectDeliveryYmdChar));
-							curCel.setCellValue(toDate(backlogDetail.getExpectedDeliveryDate()));
-
-							// "実績 Actual"
-							// 工数 Hours
-							curCel = curRow
-									.getCell(CellReference.convertColStringToIndex(colActualTotalHoursBacklogChar));
-							curCel.setCellValue(Optional.ofNullable(backlogDetail.getActualHours())
-									.orElse(BigDecimal.ZERO).doubleValue());
-							// 開始日 Begin
-							curCel = curRow.getCell(CellReference.convertColStringToIndex(colActStartYmdChar));
-							curCel.setCellValue(toDate(backlogDetail.getActualStartDate()));
-							// 完了日 End
-							curCel = curRow.getCell(CellReference.convertColStringToIndex(colActEndYmdChar));
-							curCel.setCellValue(toDate(backlogDetail.getActualDueDate()));
-							// 進捗 Progress
-							curCel = curRow.getCell(CellReference.convertColStringToIndex(colActProgressChar));
-							curCel.setCellValue(getProgress(backlogDetail.getProgress()));
-							// 納品日 Delivery
-							curCel = curRow.getCell(CellReference.convertColStringToIndex(colActDeliveryYmdChar));
-							curCel.setCellValue(toDate(backlogDetail.getActualDeliveryDate()));
-
-							curIdx++;
-						}
-						break;
+						rowStart = mergeCellRange.getFirstRow();
 					}
+					var curIdx = 0;
+					for (final BacklogDetail backlogDetail : backlogs) {
+						final var curRowIdx = rowStart + curIdx;
+						final var curRow = sheet.getRow(curRowIdx);
+						// 工程 Operation
+						var curCel = curRow.getCell(CellReference.convertColStringToIndex(colTOperationChar));
+						curCel.setCellValue(getOperation(backlogDetail.getIssueType()));
+						// 担当 PIC
+						curCel = curRow.getCell(CellReference.convertColStringToIndex(columnPicCharacter));
+						curCel.setCellValue(backlogDetail.getMailId());
+						// ステータス Status
+						// curCel =
+						// curRow.getCell(CellReference.convertColStringToIndex(columnStatusCharacter));
+						// curCel.setCellValue(backlogDetail.getStatus());
+
+						// "予定 Schedule"
+						// 工数 Hours
+						curCel = curRow.getCell(CellReference.convertColStringToIndex(colExpectHousrChar));
+						curCel.setCellValue(Optional.ofNullable(backlogDetail.getEstimatedHours())
+								.orElse(BigDecimal.ZERO).doubleValue());
+						// 開始日 Begin
+						curCel = curRow.getCell(CellReference.convertColStringToIndex(colExpectStartYmdChar));
+						curCel.setCellValue(toDate(backlogDetail.getExpectedStartDate()));
+						// 完了日 End
+						curCel = curRow.getCell(CellReference.convertColStringToIndex(colExpectEndYmdChar));
+						curCel.setCellValue(toDate(backlogDetail.getExpectedDueDate()));
+						// 納品日 Delivery
+						curCel = curRow.getCell(CellReference.convertColStringToIndex(colExpectDeliveryYmdChar));
+						curCel.setCellValue(toDate(backlogDetail.getExpectedDeliveryDate()));
+
+						// "実績 Actual"
+						// 工数 Hours
+						curCel = curRow.getCell(CellReference.convertColStringToIndex(colActualTotalHoursBacklogChar));
+						curCel.setCellValue(Optional.ofNullable(backlogDetail.getActualHours()).orElse(BigDecimal.ZERO)
+								.doubleValue());
+						// 開始日 Begin
+						curCel = curRow.getCell(CellReference.convertColStringToIndex(colActStartYmdChar));
+						curCel.setCellValue(toDate(backlogDetail.getActualStartDate()));
+						// 完了日 End
+						curCel = curRow.getCell(CellReference.convertColStringToIndex(colActEndYmdChar));
+						curCel.setCellValue(toDate(backlogDetail.getActualDueDate()));
+						// 進捗 Progress
+						curCel = curRow.getCell(CellReference.convertColStringToIndex(colActProgressChar));
+						curCel.setCellValue(getProgress(backlogDetail.getProgress()));
+						// 納品日 Delivery
+						curCel = curRow.getCell(CellReference.convertColStringToIndex(colActDeliveryYmdChar));
+						curCel.setCellValue(toDate(backlogDetail.getActualDeliveryDate()));
+
+						curIdx++;
+					}
+					break;
 				}
 			}
 		}
 	}
 
-	private void standardizedRangeInput(Sheet sheet, FormulaEvaluator formulaEvaluator, YearMonth targetYmS,
-			YearMonth targetYmE) {
+	private void standardizedRangeInput(final Sheet sheet, final YearMonth targetYmS, final YearMonth targetYmE) {
 		final var row = sheet.getRow(targetMonthRowIdx);
 		String lastTarget = null;
 		for (final Cell cell : row) {
@@ -547,28 +555,26 @@ public class BacklogExcelUtil {
 			final var cellVal = StringUtils.trim(ScheduleHelper.readContentCell(sheet, cell));
 			if (StringUtils.isNotBlank(cellVal)) {
 				lastTarget = cellVal;
-				System.out.println("LastTarget: " + lastTarget);
 			}
 		}
 		if (StringUtils.isBlank(lastTarget)) { // Check sheet is from template
 			var currentYm = targetYmS;
 			Boolean isFirst = true;
 			while (currentYm.isBefore(targetYmE.plusMonths(1))) {
-				addColInput(sheet, formulaEvaluator, currentYm, isFirst);
+				addColInput(sheet, currentYm, isFirst);
 				currentYm = currentYm.plusMonths(1);
 				isFirst = false;
 			}
 		}
 	}
 
-	private void addColInput(final Sheet sheet, final FormulaEvaluator formulaEvaluator, YearMonth targetYm,
-			final boolean isFirstTargetMonth) {
+	private void addColInput(final Sheet sheet, final YearMonth targetYm, final boolean isFirstTargetMonth) {
 		final var row = sheet.getRow(targetMonthRowIdx);
 		final var lastColumnIndex = row.getLastCellNum() - 1;
 
 		// Check if there are any rows in the sheet
 		if (sheet.getLastRowNum() < 0) {
-			System.out.println("Sheet is empty.");
+			log.debug("Sheet {} is empty", sheet.getSheetName());
 			return;
 		}
 		final var lengthOfMonth = targetYm.lengthOfMonth();
@@ -633,16 +639,13 @@ public class BacklogExcelUtil {
 				// set value for new date
 			}
 		}
-		System.out.println("Add column for new target successfully.");
 	}
 
-	public void reUpdateFormatCondition(Sheet sheet, int numOfAddRow, int numOfAddCol) {
+	public void reUpdateFormatCondition(final Sheet sheet, final int numOfAddRow, final int numOfAddCol) {
 
 		final var formatting = sheet.getSheetConditionalFormatting();
 
-		// Get the number of conditional formatting rules
-		final var numFormattingRules = formatting.getNumConditionalFormattings();
-		System.out.println("Number of conditional formatting rules: " + numFormattingRules);
+		formatting.getNumConditionalFormattings();
 
 		// Get the existing ConditionalFormattingRule
 		final var cf = formatting.getConditionalFormattingAt(0);
@@ -665,71 +668,18 @@ public class BacklogExcelUtil {
 	/**
 	 * @param args
 	 */
-	public static void main(String[] args) {
-		var obj = new BacklogExcelUtil();
+	public static void main(final String[] args) {
+		final var obj = new BacklogExcelUtil();
 		final var wrPath = "templates/pjjyuji_data_csv_20240415.csv";
 		final var backlogPath = "templates/Backlog-Issues-20240415-1157.csv";
 		obj.createScheduleFromBacklog(wrPath, backlogPath);
 	}
 
-	public void createScheduleFromBacklog(String wrPath, String backlogPath) {
+	public void createScheduleFromBacklog(final String wrPath, final String backlogPath) {
 		final var backlogService = new BacklogService();
 		try {
 			backlogService.stastics(wrPath, backlogPath);
 		} catch (final Exception e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-	}
-
-	private void doSample() {
-		final var ankenNoUpdate = "#29033";
-		final var ankenNoInsert = "SYMPHO-001";
-		final var now = YearMonth.now();
-		List<BacklogDetail> l = new ArrayList<>(6);
-		try (var fis = BacklogExcelUtil.class.getClassLoader().getResourceAsStream(scheduleTemplatePath);
-				Workbook workbook = new XSSFWorkbook(fis)) {
-			final var formulaEvaluator = workbook.getCreationHelper().createFormulaEvaluator();
-			final var sheetIterator = workbook.sheetIterator();
-			while (sheetIterator.hasNext()) {
-				final var sheet = sheetIterator.next();
-				// Kiểm tra là sheet điền schedule
-				if (!ScheduleHelper.isScheduleSheet(sheet)) {
-					continue;
-				}
-				System.out.println("Sheet: " + sheet.getSheetName());
-
-//				addTotalBacklogCol(sheet, formulaEvaluator);
-
-				// Thêm range nhập cho tháng hiện hành
-				now.minusMonths(2);
-				final var ymS = now.minusMonths(2);
-				final var ymE = now;
-
-				standardizedRangeInput(sheet, formulaEvaluator, ymS, ymE);
-
-				// Thêm dòng trống để điền thông tin mới
-				addRowForInsertData(ankenNoUpdate, sheet, l, formulaEvaluator);
-
-				addRowForInsertData(ankenNoInsert, sheet, l, formulaEvaluator);
-
-				System.out.println("Add row created successfully.");
-
-				// Cập nhật lại công thức
-				updatedTotalActualHoursFormula(sheet, formulaEvaluator);
-				updatedTotalFooterFormula(sheet, formulaEvaluator);
-
-				// Chạy lại toàn bộ công thức
-				evaluateAllFormula(workbook);
-
-				// create
-				// -- create new sheet ? tự tạo template
-				// update
-			}
-			// Ghi dữ liệu vào tệp tin
-			saveToNewFileSchedule(workbook, "03006523", null);
-
-		} catch (final IOException e) {
 			e.printStackTrace();
 		}
 	}
@@ -740,13 +690,13 @@ public class BacklogExcelUtil {
 				.collect(Collectors.groupingBy(BacklogDetail::getAnkenNo));
 		for (final Map.Entry<String, List<BacklogDetail>> entry : groupedBacklogs.entrySet()) {
 			final var ankenNo = entry.getKey();
-			var curBacklog = entry.getValue();
+			final var curBacklog = entry.getValue();
 			addRowForInsertData(ankenNo, sheet, curBacklog, formulaEvaluator);
 		}
 	}
 
-	private void fillBacklogInfo(String projecCd, final List<PjjyujiDetail> pds, final List<BacklogDetail> bds,
-			Workbook workbook) {
+	private void fillBacklogInfo(final List<PjjyujiDetail> pds, final List<BacklogDetail> bds,
+			final Workbook workbook) {
 		final var yearMonths = pds.stream().map(PjjyujiDetail::getTargetYmd).map(YearMonth::from).distinct().toList();
 		final var now = YearMonth.now();
 		final var ymS = yearMonths.stream().min(YearMonth::compareTo).orElse(now);
@@ -762,6 +712,9 @@ public class BacklogExcelUtil {
 				.filter(x -> !StringUtils.equals(issuTypeSpec, x.getIssueType())
 						&& !StringUtils.equals(issuTypeBug, x.getIssueType())) //
 				.toList();
+		log.debug("fillBacklogInfo.PG->CNT: {}", backlogPg.size());
+		log.debug("fillBacklogInfo.SPEC->CNT: {}", backlogSpec.size());
+		log.debug("fillBacklogInfo.BUG->CNT: {}", backlogBug.size());
 		final var formulaEvaluator = workbook.getCreationHelper().createFormulaEvaluator();
 		final var sheetIterator = workbook.sheetIterator();
 		while (sheetIterator.hasNext()) {
@@ -771,9 +724,8 @@ public class BacklogExcelUtil {
 				continue;
 			}
 			final var sheetName = StringUtils.lowerCase(sheet.getSheetName());
-			System.out.println("Sheet: " + sheetName);
 
-			standardizedRangeInput(sheet, formulaEvaluator, ymS, ymE);
+			standardizedRangeInput(sheet, ymS, ymE);
 
 			if (StringUtils.equals(sheetName, "pg_spec")) {
 				fillRowForInput(backlogSpec, sheet, formulaEvaluator);
@@ -799,16 +751,18 @@ public class BacklogExcelUtil {
 	 * @param datas
 	 * @param workbook
 	 */
-	private void fillScheduleInfo(String projecCd, final List<PjjyujiDetail> pds, final List<BacklogDetail> bds,
-			Workbook workbook) {
+	private void fillScheduleInfo(final String projecCd, final List<PjjyujiDetail> pds, final List<BacklogDetail> bds,
+			final Workbook workbook) {
 
-		fillBacklogInfo(projecCd, pds, bds, workbook);
+		log.debug("fillScheduleInfo: {}", projecCd);
+
+		fillBacklogInfo(pds, bds, workbook);
 
 		// Chạy lại toàn bộ công thức
 		evaluateAllFormula(workbook);
 	}
 
-	public void createSchedule(String projecCd, Path backlogSchedulePath, final List<PjjyujiDetail> pds,
+	public void createSchedule(final String projecCd, final Path backlogSchedulePath, final List<PjjyujiDetail> pds,
 			final List<BacklogDetail> bds) {
 		try (var fis = BacklogExcelUtil.class.getClassLoader().getResourceAsStream(scheduleTemplatePath);
 				Workbook workbook = new XSSFWorkbook(fis)) {
@@ -831,7 +785,8 @@ public class BacklogExcelUtil {
 	 * @throws FileNotFoundException
 	 * @throws IOException
 	 */
-	private void saveToNewFileSchedule(Workbook workbook, String pjCd, Path scheduleFolerPath) throws IOException {
+	private void saveToNewFileSchedule(final Workbook workbook, final String pjCd, final Path scheduleFolerPath)
+			throws IOException {
 		// Ghi dữ liệu vào tệp tin
 		final var fileName = StringUtils.replaceEach(templateFile, new String[] { "{projectCd}", },
 				new String[] { pjCd });
@@ -848,11 +803,10 @@ public class BacklogExcelUtil {
 		try (var fileOut = new FileOutputStream(targetFile, false);) {
 
 			workbook.write(fileOut);
-			System.out.println("New file created: " + targetFile);
 		}
 	}
 
-	private void evaluateAllFormula(Workbook workbook) {
+	private void evaluateAllFormula(final Workbook workbook) {
 		// Create a formula evaluator
 		final var evaluator = workbook.getCreationHelper().createFormulaEvaluator();
 

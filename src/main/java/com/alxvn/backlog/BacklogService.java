@@ -70,8 +70,8 @@ public class BacklogService {
 	private static final String pathDefaultTemplate = "D:\\Doc\\Backlog\\default\\%s";
 	private static final String subFldName = "Backlog_%s";
 
-	public void stastics(MultipartFile pjjyujiDataCsv, MultipartFile backlogIssues, MultipartFile backlogGanttChart)
-			throws IOException, CsvException, IncorrectFullNameException {
+	public void stastics(final MultipartFile pjjyujiDataCsv, final MultipartFile backlogIssues,
+			final MultipartFile backlogGanttChart) throws IOException, CsvException, IncorrectFullNameException {
 
 		List<PjjyujiDetail> pds = new ArrayList<>();
 		final var pjjyujiDataCsvName = pjjyujiDataCsv.getOriginalFilename();
@@ -98,13 +98,14 @@ public class BacklogService {
 		genSchedule(pds, bds);
 	}
 
-	public void stastics(String workingReportFilePath, String backlogIssuesFilePath)
+	public void stastics(final String workingReportFilePath, final String backlogIssuesFilePath)
 			throws IOException, CsvException, IncorrectFullNameException {
-
+		log.debug("stastics START");
 		final var pds = readPjjyujiDataCsv(workingReportFilePath);
 		final var bds = readBacklogIssues(backlogIssuesFilePath);
 
 		genSchedule(pds, bds);
+		log.debug("stastics END");
 	}
 
 	private void genSchedule(final List<PjjyujiDetail> pds, final List<BacklogDetail> bis) throws IOException {
@@ -133,11 +134,11 @@ public class BacklogService {
 			 */
 			genSchedule(projectScheduleTemplate, projectCd, workingReports, backlogs);
 		}
-		System.out.println("All schedule created successfully.");
+		log.debug("All schedule created successfully.");
 	}
 
 	private Map<Pair<CustomerTarget, String>, Pair<List<PjjyujiDetail>, List<BacklogDetail>>> getListProject(
-			List<PjjyujiDetail> pds, List<BacklogDetail> bis) {
+			final List<PjjyujiDetail> pds, final List<BacklogDetail> bis) {
 //		<PJCD, PJCDJP>,
 		final Map<Pair<CustomerTarget, String>, Pair<List<PjjyujiDetail>, List<BacklogDetail>>> result = new HashMap<>();
 		var cusTarget = CustomerTarget.NONE;
@@ -238,7 +239,7 @@ public class BacklogService {
 			"深夜残業(分)" //
 	};
 
-	private List<PjjyujiDetail> parseWorkingReport(CSVReader csvReader)
+	private List<PjjyujiDetail> parseWorkingReport(final CSVReader csvReader)
 			throws IOException, CsvException, IncorrectFullNameException {
 		final List<PjjyujiDetail> result = new ArrayList<>();
 		final var header = csvReader.readNext();
@@ -316,7 +317,7 @@ public class BacklogService {
 		return result;
 	}
 
-	private List<PjjyujiDetail> readPjjyujiDataCsv(MultipartFile file)
+	private List<PjjyujiDetail> readPjjyujiDataCsv(final MultipartFile file)
 			throws IOException, CsvException, IncorrectFullNameException {
 		try (final var csvReader = new CSVReaderBuilder(
 				new BufferedReader(new InputStreamReader(file.getInputStream(), Charset.forName("Shift_JIS"))))
@@ -327,7 +328,7 @@ public class BacklogService {
 
 	}
 
-	private List<PjjyujiDetail> readPjjyujiDataCsv(String filePath)
+	private List<PjjyujiDetail> readPjjyujiDataCsv(final String filePath)
 			throws IOException, CsvException, IncorrectFullNameException {
 		try (final var csvReader = new CSVReaderBuilder(new BufferedReader(new InputStreamReader(
 				BacklogService.class.getClassLoader().getResourceAsStream(filePath), Charset.forName("Shift_JIS"))))
@@ -338,14 +339,14 @@ public class BacklogService {
 
 	}
 
-	private LocalDate parseBacklogDate(String str) {
+	private LocalDate parseBacklogDate(final String str) {
 		if (StringUtils.isBlank(str)) {
 			return null;
 		}
 		return LocalDate.parse(str, FORMATTER_MMMDDYYYY);
 	}
 
-	private String extractPjCdFromMileStone(String ms, String sj) {
+	private String extractPjCdFromMileStone(final String ms, final String sj) {
 		final var regex = "(\\d{8})";
 
 		final var pattern = Pattern.compile(regex);
@@ -411,7 +412,7 @@ public class BacklogService {
 			"課題発生第三者"//
 	};
 
-	private List<BacklogDetail> parseBacklogDetail(CSVReader csvReader)
+	private List<BacklogDetail> parseBacklogDetail(final CSVReader csvReader)
 			throws IOException, CsvException, IncorrectFullNameException {
 		final List<BacklogDetail> result = new ArrayList<>();
 		// Read the header row
@@ -503,7 +504,7 @@ public class BacklogService {
 		return result;
 	}
 
-	private List<BacklogDetail> readBacklogIssues(MultipartFile file)
+	private List<BacklogDetail> readBacklogIssues(final MultipartFile file)
 			throws IOException, CsvException, IncorrectFullNameException {
 		try (final var csvReader = new CSVReaderBuilder(
 				new BufferedReader(new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8)))
@@ -513,7 +514,7 @@ public class BacklogService {
 		}
 	}
 
-	private List<BacklogDetail> readBacklogIssues(String filePath)
+	private List<BacklogDetail> readBacklogIssues(final String filePath)
 			throws IOException, CsvException, IncorrectFullNameException {
 		try (final var csvReader = new CSVReaderBuilder(new BufferedReader(new InputStreamReader(
 				BacklogService.class.getClassLoader().getResourceAsStream(filePath), StandardCharsets.UTF_8)))
@@ -523,7 +524,7 @@ public class BacklogService {
 		}
 	}
 
-	private List<String> readBacklogGanttChart(MultipartFile file) {
+	private List<String> readBacklogGanttChart(final MultipartFile file) {
 		final List<String> fileData = new ArrayList<>();
 
 //		final Workbook workbook = WorkbookFactory.create(file.getInputStream());
@@ -546,7 +547,7 @@ public class BacklogService {
 	 * @return
 	 * @throws IOException
 	 */
-	private Path createFolderBacklogSchedule(Path schedulePath) throws IOException {
+	private Path createFolderBacklogSchedule(final Path schedulePath) throws IOException {
 		final var formatter = DateTimeFormatter.ofPattern("yyyyMM");
 
 		// Format the LocalDateTime object to a string using the formatter
@@ -557,7 +558,7 @@ public class BacklogService {
 		return subfolderPath;
 	}
 
-	private Path backupSch(Path schedulePath) throws IOException {
+	private Path backupSch(final Path schedulePath) throws IOException {
 		final var subfolderPath = schedulePath.resolve(String.format(subFldName, LocalDateTime.now()));
 		// Create the subfolder
 		Files.createDirectory(subfolderPath);
@@ -581,20 +582,20 @@ public class BacklogService {
 		if (StringUtils.isNotBlank(pjcd)) {
 			final var schedulePath = Paths.get(String.format(schPathTemplate, pjcd));
 			final var backlogSchedulePath = createFolderBacklogSchedule(schedulePath);
-			var util = new BacklogExcelUtil();
+			final var util = new BacklogExcelUtil();
 			util.createSchedule(pjcd, backlogSchedulePath, pds, bds);
 		} else {
 			log.debug("Schedule.wr.isNotValid: {}", pds);
 			log.debug("Schedule.bl.isNotValid: {}", bds);
 			final var schedulePath = Paths.get(String.format(schPathTemplate, pjcd));
 			final var backlogSchedulePath = createFolderBacklogSchedule(schedulePath);
-			var util = new BacklogExcelUtil();
+			final var util = new BacklogExcelUtil();
 			util.createSchedule(pjcd, backlogSchedulePath, pds, bds);
 		}
 	}
 
-	public void updateSchedule(String schPathTemplate, String pjcd, Pair<List<PjjyujiDetail>, List<BacklogDetail>> data)
-			throws IOException {
+	public void updateSchedule(final String schPathTemplate, final String pjcd,
+			final Pair<List<PjjyujiDetail>, List<BacklogDetail>> data) throws IOException {
 		final var schedulePath = Paths.get(String.format(schPathTemplate, pjcd));
 		// Check if the file or directory exists
 		final var exists = Files.exists(schedulePath);
