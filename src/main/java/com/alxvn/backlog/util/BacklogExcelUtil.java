@@ -19,6 +19,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.poi.ss.usermodel.Cell;
@@ -40,6 +42,7 @@ import org.slf4j.LoggerFactory;
 import com.alxvn.backlog.BacklogService;
 import com.alxvn.backlog.dto.BacklogDetail;
 import com.alxvn.backlog.dto.PjjyujiDetail;
+import com.alxvn.backlog.dto.WorkingPhase;
 
 /**
  *
@@ -327,7 +330,7 @@ public class BacklogExcelUtil {
 	}
 
 	private boolean isHeader(final Row row) {
-		return row.getRowNum() < targetDateRowIdx;
+		return row.getRowNum() <= targetDateRowIdx;
 	}
 
 	private boolean addRowForExistsAnkenVal(final String ankenNo, final Sheet sheet, final List<BacklogDetail> backlogs,
@@ -695,12 +698,7 @@ public class BacklogExcelUtil {
 		}
 	}
 
-	private void fillBacklogInfo(final List<PjjyujiDetail> pds, final List<BacklogDetail> bds,
-			final Workbook workbook) {
-		final var yearMonths = pds.stream().map(PjjyujiDetail::getTargetYmd).map(YearMonth::from).distinct().toList();
-		final var now = YearMonth.now();
-		final var ymS = yearMonths.stream().min(YearMonth::compareTo).orElse(now);
-		final var ymE = yearMonths.stream().max(YearMonth::compareTo).orElse(now);
+	private void fillBacklogInfo(final List<BacklogDetail> bds, final Workbook workbook) {
 
 		final var backlogBug = bds.stream() //
 				.filter(x -> StringUtils.equals(issuTypeBug, x.getIssueType())) //
@@ -725,8 +723,6 @@ public class BacklogExcelUtil {
 			}
 			final var sheetName = StringUtils.lowerCase(sheet.getSheetName());
 
-			standardizedRangeInput(sheet, ymS, ymE);
-
 			if (StringUtils.equals(sheetName, "pg_spec")) {
 				fillRowForInput(backlogSpec, sheet, formulaEvaluator);
 			} else if (StringUtils.equals(sheetName, "pg_bug")) {
@@ -745,6 +741,135 @@ public class BacklogExcelUtil {
 		}
 	}
 
+	private void fillWorkingReportInfo(final List<PjjyujiDetail> pds, final List<BacklogDetail> bds,
+			final Workbook workbook) {
+		if (CollectionUtils.isEmpty(pds)) {
+			return;
+		}
+		final var formulaEvaluator = workbook.getCreationHelper().createFormulaEvaluator();
+		final var dataFormatter = new DataFormatter();
+		final var sheetIterator = workbook.sheetIterator();
+		while (sheetIterator.hasNext()) {
+			final var sheet = sheetIterator.next();
+			if (!ScheduleHelper.isScheduleSheet(sheet)) {
+				continue;
+			}
+			final var sheetName = StringUtils.lowerCase(sheet.getSheetName());
+
+			var rowStart = 0;
+			var rowEnd = 0;
+			Row targetDateRow = null;
+			for (final Row row : sheet) {
+				final var rowIdx = row.getRowNum();
+				// skip xử lý khi đang đọc các dòng header
+				if (isHeader(row)) {
+					targetDateRow = row;
+					continue;
+				}
+				if (rowIdx <= rowEnd) {
+					continue;
+				}
+				final var cell = row.getCell(columnAnkenIndex);
+				if (cell != null) {
+					formulaEvaluator.evaluate(cell);
+					final var formattedCellValue = dataFormatter.formatCellValue(cell, formulaEvaluator);
+					if (!StringUtils.isNotBlank(formattedCellValue)) {
+						break; // exit loop
+					}
+					final var mergeCellRange = ScheduleHelper.getMergedRegionForCell(cell);
+					if (mergeCellRange != null) {
+						rowStart = mergeCellRange.getFirstRow();
+						rowEnd = mergeCellRange.getLastRow();
+					}
+					// find working report record matching ankenNo and type of sheet
+					final var wrTargets = pds.stream().filter(x -> {
+						final var ankenNo = x.getAnkenNo();
+						final var progress = x.getProcess().getName();
+						final var progressCd = x.getProcess().getCode();
+						if (StringUtils.equals(sheetName, "pg_spec")) {
+							return StringUtils.equals(ankenNo, formattedCellValue)
+									&& StringUtils.equals(progressCd, WorkingPhase.ID45.getCode());
+						}
+						if (StringUtils.equals(sheetName, "pg_bug")) {
+							return StringUtils.equals(ankenNo, formattedCellValue)
+									&& StringUtils.equals(progressCd, WorkingPhase.ID43.getCode());
+						}
+						return StringUtils.equals(ankenNo, formattedCellValue);
+					}).toList();
+					if (CollectionUtils.isEmpty(wrTargets)) {
+						continue;
+					}
+					var currentRow = rowStart;
+					while (currentRow <= rowEnd) {
+						final var targetRow = sheet.getRow(currentRow);
+						if (targetRow == null) {
+							currentRow++;
+							continue;
+						}
+
+						// Process the current row here
+						final var pic = targetRow.getCell(CellReference.convertColStringToIndex(columnPicCharacter))
+								.getStringCellValue();
+						final var operation = targetRow
+								.getCell(CellReference.convertColStringToIndex(colTOperationChar)).getStringCellValue();
+						final var wrOfRow = wrTargets.stream().filter(w -> {
+							final var mailId = w.getMailId();
+							return StringUtils.equals(pic, mailId);
+						}).toList();
+						if (CollectionUtils.isEmpty(wrOfRow)) {
+							currentRow++;
+							continue;
+						}
+
+						final Map<LocalDate, Integer> groupedData = wrOfRow.stream().collect(Collectors.groupingBy(
+								PjjyujiDetail::getTargetYmd, Collectors.summingInt(PjjyujiDetail::getMinute)));
+						if (MapUtils.isEmpty(groupedData)) {
+							currentRow++;
+							continue;
+						}
+						for (final Cell c : targetRow) {
+							final var curColIdx = c.getColumnIndex();
+							if (curColIdx < columnStartDateInputIdx) {
+								continue;
+							}
+							final var cellTargetDate = targetDateRow.getCell(curColIdx);
+							final var cellTargetVal = ScheduleHelper.getCellValueAsString(cellTargetDate,
+									formulaEvaluator.evaluate(cellTargetDate));
+							if (StringUtils.isNotBlank(cellTargetVal)) {
+								final var targetYmd = LocalDate.parse(cellTargetVal, FORMATTER_YYYYMMDD);
+								final var minutes = groupedData.getOrDefault(targetYmd, null);
+								if (minutes != null) {
+									final var hours = minutes / 60.0; // Convert minutes to hours
+									c.setCellValue(hours);
+								}
+							}
+						}
+						// Increment the currentRow variable
+						currentRow++;
+					}
+				}
+			}
+		}
+	}
+
+	private void fillRangeInputDetail(final List<PjjyujiDetail> pds, final Workbook workbook) {
+
+		final var yearMonths = pds.stream().map(PjjyujiDetail::getTargetYmd).map(YearMonth::from).distinct().toList();
+		final var now = YearMonth.now();
+		final var ymS = yearMonths.stream().min(YearMonth::compareTo).orElse(now);
+		final var ymE = yearMonths.stream().max(YearMonth::compareTo).orElse(now);
+
+		final var sheetIterator = workbook.sheetIterator();
+		while (sheetIterator.hasNext()) {
+			final var sheet = sheetIterator.next();
+			if (!ScheduleHelper.isScheduleSheet(sheet)) {
+				continue;
+			}
+			standardizedRangeInput(sheet, ymS, ymE);
+		}
+		evaluateAllFormula(workbook);
+	}
+
 	/**
 	 *
 	 * @param projecCd
@@ -756,7 +881,11 @@ public class BacklogExcelUtil {
 
 		log.debug("fillScheduleInfo: {}", projecCd);
 
-		fillBacklogInfo(pds, bds, workbook);
+		fillRangeInputDetail(pds, workbook);
+
+		fillBacklogInfo(bds, workbook);
+
+		fillWorkingReportInfo(pds, bds, workbook);
 
 		// Chạy lại toàn bộ công thức
 		evaluateAllFormula(workbook);

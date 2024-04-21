@@ -68,14 +68,14 @@ public class ScheduleHelper {
 		throw new IllegalStateException("Utility class");
 	}
 
-	public static boolean isTotalRow(Row row, String totalVal, Integer scheTotalIdx) {
+	public static boolean isTotalRow(final Row row, final String totalVal, final Integer scheTotalIdx) {
 		final var cell = CellUtil.getCell(row, scheTotalIdx);
 		final var val = getCellValueAsString(cell);
 		return StringUtils.equals(val, totalVal);
 
 	}
 
-	public static boolean isValidSchFileName(File fileSchedule) {
+	public static boolean isValidSchFileName(final File fileSchedule) {
 		if (Objects.nonNull(fileSchedule)) {
 			final var fileName = fileSchedule.getName();
 			final var pattern = "^(QDA-0222a_プロジェクト管理表_).*\\.(xls|xlsx|xlsm)$";
@@ -90,7 +90,7 @@ public class ScheduleHelper {
 		return false;
 	}
 
-	public static boolean isValidScheduleFileName(String fileName) {
+	public static boolean isValidScheduleFileName(final String fileName) {
 		if (Objects.nonNull(fileName)) {
 			final var pattern = "^(QDA-0222a_プロジェクト管理表_).*\\.(xls|xlsx|xlsm)$";
 			final var r = Pattern.compile(pattern, Pattern.CANON_EQ);
@@ -104,7 +104,7 @@ public class ScheduleHelper {
 		return false;
 	}
 
-	public static boolean isScheduleSheet(Sheet sheet) throws EncryptedDocumentException {
+	public static boolean isScheduleSheet(final Sheet sheet) throws EncryptedDocumentException {
 		if (Objects.isNull(sheet)) {
 			return false;
 		}
@@ -113,7 +113,7 @@ public class ScheduleHelper {
 		return matcher.find();
 	}
 
-	private static String resolveDate(Cell cell) {
+	public static String resolveDate(final Cell cell) {
 		// Get the date value from the cell
 		final var date = cell.getDateCellValue();
 		// Convert the Date to Instant
@@ -161,7 +161,7 @@ public class ScheduleHelper {
 		return strCellValue;
 	}
 
-	public static String getCellValueAsString(Cell cell, CellValue cellValue) {
+	public static String getCellValueAsString(final Cell cell, final CellValue cellValue) {
 		if (Objects.nonNull(cellValue)) {
 			switch (cellValue.getCellType()) {
 			case BOOLEAN:
@@ -188,7 +188,7 @@ public class ScheduleHelper {
 		return getCellValueAsString(cell);
 	}
 
-	public static String getCellValueAsString(Cell cell) {
+	public static String getCellValueAsString(final Cell cell) {
 		String strCellValue = null;
 		if (Objects.nonNull(cell)) {
 			switch (cell.getCellType()) {
@@ -216,7 +216,7 @@ public class ScheduleHelper {
 		return strCellValue;
 	}
 
-	public static Double getWrMinute(List<PjjyujiDetail> wrDetails, String ankenNo) {
+	public static Double getWrMinute(final List<PjjyujiDetail> wrDetails, final String ankenNo) {
 		return Double.parseDouble(df.format(wrDetails.stream().filter(x -> StringUtils.equals(ankenNo, x.getAnkenNo()))
 				/**/
 				.map(PjjyujiDetail::getMinute).map(Double::valueOf).reduce(0.0, Double::sum)));
@@ -234,7 +234,7 @@ public class ScheduleHelper {
 		return columnName.toString();
 	}
 
-	public static CellRangeAddress getMergedRegionForCell(Cell c) {
+	public static CellRangeAddress getMergedRegionForCell(final Cell c) {
 		final var s = c.getRow().getSheet();
 		for (final CellRangeAddress mergedRegion : s.getMergedRegions()) {
 			if (mergedRegion.isInRange(c.getRowIndex(), c.getColumnIndex())) {
@@ -246,7 +246,7 @@ public class ScheduleHelper {
 		return null;
 	}
 
-	public static String readContentFromMergedCells(Sheet sheet, CellRangeAddress mergedCells) {
+	public static String readContentFromMergedCells(final Sheet sheet, final CellRangeAddress mergedCells) {
 
 		if (Objects.isNull(mergedCells)) {
 			return null;
@@ -255,7 +255,7 @@ public class ScheduleHelper {
 		return getCellValueAsString(cell);
 	}
 
-	public static String readContentCell(Sheet sheet, Cell cell) {
+	public static String readContentCell(final Sheet sheet, final Cell cell) {
 		final var cra = getMergedRegionForCell(cell);
 		if (cra != null) {
 			return readContentFromMergedCells(sheet, cra);
