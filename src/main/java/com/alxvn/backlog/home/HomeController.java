@@ -21,7 +21,10 @@ public class HomeController {
 
 	@GetMapping("stastics")
 	public String stastics() {
-		BacklogExcelUtil.createScheduleFromBacklog();
+		var util = new BacklogExcelUtil();
+		final var wrPath = "templates/pjjyuji_data_csv_20240415.csv";
+		final var backlogPath = "templates/Backlog-Issues-20240415-1157.csv";
+		util.createScheduleFromBacklog(wrPath, backlogPath);
 		return "index";
 	}
 }

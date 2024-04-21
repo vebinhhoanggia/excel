@@ -37,6 +37,7 @@ public class BacklogDetail {
 	private String targetCustomer;
 	private String progress;
 	private LocalDate expectedDeliveryDate;
+	private LocalDate actualDeliveryDate;
 	private String bugCategory;
 	private String bugOrigin;
 	private String bugCreator;
@@ -211,6 +212,14 @@ public class BacklogDetail {
 		this.expectedDeliveryDate = expectedDeliveryDate;
 	}
 
+	public LocalDate getActualDeliveryDate() {
+		return actualDeliveryDate;
+	}
+
+	public void setActualDeliveryDate(LocalDate actualDeliveryDate) {
+		this.actualDeliveryDate = actualDeliveryDate;
+	}
+
 	public String getBugCategory() {
 		return bugCategory;
 	}
@@ -361,6 +370,11 @@ public class BacklogDetail {
 
 		public final Builder expectedDeliveryDate(LocalDate expectedDeliveryDate) {
 			backlogDetail.expectedDeliveryDate = expectedDeliveryDate;
+			return this;
+		}
+
+		public final Builder actualDeliveryDate(LocalDate actualDeliveryDate) {
+			backlogDetail.actualDeliveryDate = actualDeliveryDate;
 			return this;
 		}
 

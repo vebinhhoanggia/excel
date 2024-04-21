@@ -143,6 +143,9 @@ public class BacklogService {
 		var cusTarget = CustomerTarget.NONE;
 		for (final BacklogDetail bd : bis) {
 			final var pjCdJp = bd.getPjCdJp();
+			if (StringUtils.isBlank(pjCdJp)) {
+//				continue;
+			}
 			final var anken = bd.getAnkenNo();
 			final var targetCustomer = bd.getTargetCustomer();
 			if (StringUtils.isBlank(targetCustomer)) {
@@ -575,9 +578,19 @@ public class BacklogService {
 
 	private void genSchedule(final String schPathTemplate, final String pjcd, final List<PjjyujiDetail> pds,
 			final List<BacklogDetail> bds) throws IOException {
-		final var schedulePath = Paths.get(String.format(schPathTemplate, pjcd));
-		final var backlogSchedulePath = createFolderBacklogSchedule(schedulePath);
-		BacklogExcelUtil.createSchedule(pjcd, backlogSchedulePath, pds, bds);
+		if (StringUtils.isNotBlank(pjcd)) {
+			final var schedulePath = Paths.get(String.format(schPathTemplate, pjcd));
+			final var backlogSchedulePath = createFolderBacklogSchedule(schedulePath);
+			var util = new BacklogExcelUtil();
+			util.createSchedule(pjcd, backlogSchedulePath, pds, bds);
+		} else {
+			log.debug("Schedule.wr.isNotValid: {}", pds);
+			log.debug("Schedule.bl.isNotValid: {}", bds);
+			final var schedulePath = Paths.get(String.format(schPathTemplate, pjcd));
+			final var backlogSchedulePath = createFolderBacklogSchedule(schedulePath);
+			var util = new BacklogExcelUtil();
+			util.createSchedule(pjcd, backlogSchedulePath, pds, bds);
+		}
 	}
 
 	public void updateSchedule(String schPathTemplate, String pjcd, Pair<List<PjjyujiDetail>, List<BacklogDetail>> data)
