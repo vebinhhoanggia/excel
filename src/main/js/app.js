@@ -117,7 +117,7 @@ class GenSchedule extends React.Component {
 				.then((response) => {
 					const config = {
 						title: 'title',
-						content: response,
+						content: response.data,
 						okText: 'ＯＫ',
 						onOk() {
 							() => { };
