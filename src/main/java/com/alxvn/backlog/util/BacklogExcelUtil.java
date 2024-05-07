@@ -17,6 +17,8 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Predicate;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.apache.commons.collections4.CollectionUtils;
@@ -409,12 +411,12 @@ public class BacklogExcelUtil {
 		return isExistsDefaultRow;
 	}
 
-	private void addRowForInsertData(final String ankenNo, final Sheet sheet, final List<BacklogDetail> backlogs,
+	private void crateRowBacklog(final String ankenNo, final Sheet sheet, final List<BacklogDetail> backlogs,
 			final FormulaEvaluator formulaEvaluator) {
 		final var isExists = addRowForExistsAnkenVal(ankenNo, sheet, backlogs, formulaEvaluator);
 		if (isExists) {
 			// Cập nhật thông tin vào các row của ticket/anken
-			fillDataForRow(ankenNo, sheet, backlogs, formulaEvaluator);
+			fillBacklogData(ankenNo, sheet, backlogs, formulaEvaluator);
 			return;
 		}
 		/*
@@ -423,7 +425,7 @@ public class BacklogExcelUtil {
 		final var isExistsDefaultRow = addRowForNewAnken(ankenNo, sheet, backlogs, formulaEvaluator);
 		if (isExistsDefaultRow) {
 			// Cập nhật thông tin vào các row của ticket/anken
-			fillDataForRow(ankenNo, sheet, backlogs, formulaEvaluator);
+			fillBacklogData(ankenNo, sheet, backlogs, formulaEvaluator);
 			return;
 		}
 		/*
@@ -441,7 +443,7 @@ public class BacklogExcelUtil {
 			insertNewRowBottom(sheet, bottomRow, totalRow, ankenNo);
 		}
 		// Cập nhật thông tin vào các row của ticket/anken
-		fillDataForRow(ankenNo, sheet, backlogs, formulaEvaluator);
+		fillBacklogData(ankenNo, sheet, backlogs, formulaEvaluator);
 	}
 
 	public Date toDate(final LocalDate localDate) {
@@ -455,11 +457,13 @@ public class BacklogExcelUtil {
 		return date;
 	}
 
-	private String getOperation(final String backlogIssueType) {
-		if (StringUtils.isBlank(backlogIssueType)) {
-			return StringUtils.EMPTY;
+	private Optional<WorkingPhase> getOperation(final BacklogDetail backlogDetail) {
+		final var processOfWr = backlogDetail.getProcessOfWr();
+		final var processOfWrCd = extracProcessOfWrCd(processOfWr);
+		if (StringUtils.isBlank(processOfWrCd)) {
+			return Optional.ofNullable(null);
 		}
-		return backlogIssueType;
+		return Optional.ofNullable(WorkingPhase.fromString(processOfWrCd));
 	}
 
 	private double getProgress(final String backlogProgress) {
@@ -472,7 +476,7 @@ public class BacklogExcelUtil {
 		return value * percent;
 	}
 
-	private void fillDataForRow(final String ankenNo, final Sheet sheet, final List<BacklogDetail> backlogs,
+	private void fillBacklogData(final String ankenNo, final Sheet sheet, final List<BacklogDetail> backlogs,
 			final FormulaEvaluator formulaEvaluator) {
 		final var dataFormatter = new DataFormatter();
 		for (final Row row : sheet) {
@@ -498,7 +502,8 @@ public class BacklogExcelUtil {
 						final var curRow = sheet.getRow(curRowIdx);
 						// 工程 Operation
 						var curCel = curRow.getCell(CellReference.convertColStringToIndex(colTOperationChar));
-						curCel.setCellValue(getOperation(backlogDetail.getIssueType()));
+						curCel.setCellValue(
+								getOperation(backlogDetail).map(WorkingPhase::getName).orElse(StringUtils.EMPTY));
 						// 担当 PIC
 						curCel = curRow.getCell(CellReference.convertColStringToIndex(columnPicCharacter));
 						curCel.setCellValue(backlogDetail.getMailId());
@@ -687,28 +692,53 @@ public class BacklogExcelUtil {
 		}
 	}
 
-	private void fillRowForInput(final List<BacklogDetail> backlogs, final Sheet sheet,
+	private void genBacklogRow(final List<BacklogDetail> backlogs, final Sheet sheet,
 			final FormulaEvaluator formulaEvaluator) {
 		final Map<String, List<BacklogDetail>> groupedBacklogs = backlogs.stream()
 				.collect(Collectors.groupingBy(BacklogDetail::getAnkenNo));
 		for (final Map.Entry<String, List<BacklogDetail>> entry : groupedBacklogs.entrySet()) {
 			final var ankenNo = entry.getKey();
 			final var curBacklog = entry.getValue();
-			addRowForInsertData(ankenNo, sheet, curBacklog, formulaEvaluator);
+			crateRowBacklog(ankenNo, sheet, curBacklog, formulaEvaluator);
 		}
 	}
+
+//	10: プログラム開発
+	private String extracProcessOfWrCd(final String input) {
+		final var pattern = "(\\d+):";
+
+		final var regex = Pattern.compile(pattern);
+		final var matcher = regex.matcher(input);
+
+		if (matcher.find()) {
+			return matcher.group(1);
+		}
+		return StringUtils.EMPTY;
+	}
+
+	private final Predicate<BacklogDetail> isBacklogBug = backlogDetail -> {
+		final var processOfWrCd = extracProcessOfWrCd(backlogDetail.getProcessOfWr());
+		final var wrBugCd = WorkingPhase.ID43.getCode();
+		return StringUtils.equals(wrBugCd, processOfWrCd);
+	};
+	private final Predicate<BacklogDetail> isBacklogSpec = backlogDetail -> {
+		final var processOfWrCd = extracProcessOfWrCd(backlogDetail.getProcessOfWr());
+		final var wrBugCd = WorkingPhase.ID45.getCode();
+		return StringUtils.equals(wrBugCd, processOfWrCd);
+	};
+	private final Predicate<BacklogDetail> isBacklogPg = backlogDetail -> isBacklogBug.negate()
+			.and(isBacklogSpec.negate()).test(backlogDetail);
 
 	private void fillBacklogInfo(final List<BacklogDetail> bds, final Workbook workbook) {
 
 		final var backlogBug = bds.stream() //
-				.filter(x -> StringUtils.equals(issuTypeBug, x.getIssueType())) //
+				.filter(isBacklogBug) //
 				.toList();
 		final var backlogSpec = bds.stream() //
-				.filter(x -> StringUtils.equals(issuTypeSpec, x.getIssueType())) //
+				.filter(isBacklogSpec) //
 				.toList();
 		final var backlogPg = bds.stream() //
-				.filter(x -> !StringUtils.equals(issuTypeSpec, x.getIssueType())
-						&& !StringUtils.equals(issuTypeBug, x.getIssueType())) //
+				.filter(isBacklogPg) //
 				.toList();
 		log.debug("fillBacklogInfo.PG->CNT: {}", backlogPg.size());
 		log.debug("fillBacklogInfo.SPEC->CNT: {}", backlogSpec.size());
@@ -724,11 +754,11 @@ public class BacklogExcelUtil {
 			final var sheetName = StringUtils.lowerCase(sheet.getSheetName());
 
 			if (StringUtils.equals(sheetName, "pg_spec")) {
-				fillRowForInput(backlogSpec, sheet, formulaEvaluator);
+				genBacklogRow(backlogSpec, sheet, formulaEvaluator);
 			} else if (StringUtils.equals(sheetName, "pg_bug")) {
-				fillRowForInput(backlogBug, sheet, formulaEvaluator);
+				genBacklogRow(backlogBug, sheet, formulaEvaluator);
 			} else {
-				fillRowForInput(backlogPg, sheet, formulaEvaluator);
+				genBacklogRow(backlogPg, sheet, formulaEvaluator);
 			}
 
 			// Cập nhật lại công thức
@@ -784,7 +814,7 @@ public class BacklogExcelUtil {
 					// find working report record matching ankenNo and type of sheet
 					final var wrTargets = pds.stream().filter(x -> {
 						final var ankenNo = x.getAnkenNo();
-						final var progress = x.getProcess().getName();
+						final var progressName = x.getProcess().getName();
 						final var progressCd = x.getProcess().getCode();
 						if (StringUtils.equals(sheetName, "pg_spec")) {
 							return StringUtils.equals(ankenNo, formattedCellValue)
@@ -814,7 +844,10 @@ public class BacklogExcelUtil {
 								.getCell(CellReference.convertColStringToIndex(colTOperationChar)).getStringCellValue();
 						final var wrOfRow = wrTargets.stream().filter(w -> {
 							final var mailId = w.getMailId();
-							return StringUtils.equals(pic, mailId);
+							final var processCd = w.getProcess().getCode();
+							final var wrOpeationName = Optional.ofNullable(WorkingPhase.fromString(processCd))
+									.map(WorkingPhase::getName).orElse(StringUtils.EMPTY);
+							return StringUtils.equals(pic, mailId) && StringUtils.equals(wrOpeationName, operation);
 						}).toList();
 						if (CollectionUtils.isEmpty(wrOfRow)) {
 							currentRow++;
