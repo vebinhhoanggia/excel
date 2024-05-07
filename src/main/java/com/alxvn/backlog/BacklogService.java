@@ -74,27 +74,35 @@ public class BacklogService {
 			final MultipartFile backlogGanttChart) throws IOException, CsvException, IncorrectFullNameException {
 
 		List<PjjyujiDetail> pds = new ArrayList<>();
-		final var pjjyujiDataCsvName = pjjyujiDataCsv.getOriginalFilename();
-		if (StringUtils.isNotEmpty(pjjyujiDataCsvName) && pjjyujiDataCsvName.endsWith(".csv")) {
-			pds = readPjjyujiDataCsv(pjjyujiDataCsv);
-		} else {
-			//
-		}
-		List<BacklogDetail> bds = new ArrayList<>();
-		final var backlogIssuesName = backlogIssues.getOriginalFilename();
-		if (StringUtils.isNotEmpty(backlogIssuesName) && backlogIssuesName.endsWith(".csv")) {
-			bds = readBacklogIssues(backlogIssues);
-		} else {
-			//
+		if (pjjyujiDataCsv != null) {
+			final var pjjyujiDataCsvName = pjjyujiDataCsv.getOriginalFilename();
+			if (StringUtils.isNotEmpty(pjjyujiDataCsvName) && pjjyujiDataCsvName.endsWith(".csv")) {
+				pds = readPjjyujiDataCsv(pjjyujiDataCsv);
+			} else {
+				//
+			}
 		}
 
-		final var backlogGanttChartName = backlogGanttChart.getOriginalFilename();
-		if (StringUtils.isNotEmpty(backlogGanttChartName)
-				&& (backlogGanttChartName.endsWith(".xlsx") || backlogGanttChartName.endsWith(".xls"))) {
-			readBacklogGanttChart(backlogGanttChart);
-		} else {
-			//
+		List<BacklogDetail> bds = new ArrayList<>();
+		if (backlogIssues != null) {
+			final var backlogIssuesName = backlogIssues.getOriginalFilename();
+			if (StringUtils.isNotEmpty(backlogIssuesName) && backlogIssuesName.endsWith(".csv")) {
+				bds = readBacklogIssues(backlogIssues);
+			} else {
+				//
+			}
 		}
+
+		if (backlogGanttChart != null) {
+			final var backlogGanttChartName = backlogGanttChart.getOriginalFilename();
+			if (StringUtils.isNotEmpty(backlogGanttChartName)
+					&& (backlogGanttChartName.endsWith(".xlsx") || backlogGanttChartName.endsWith(".xls"))) {
+				readBacklogGanttChart(backlogGanttChart);
+			} else {
+				//
+			}
+		}
+
 		genSchedule(pds, bds);
 	}
 
