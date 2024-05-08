@@ -118,6 +118,7 @@ public class BacklogService {
 
 	private void genSchedule(final List<PjjyujiDetail> pds, final List<BacklogDetail> bis) throws IOException {
 
+		final List<PjjyujiDetail> pdsOrg = new ArrayList<>(pds);
 		final var projectMap = getListProject(pds, bis);
 //		bis.stream().filter(x -> StringUtils.containsIgnoreCase(x.getMilestone(), "03010791"))
 //				.collect(Collectors.toList());
@@ -142,7 +143,7 @@ public class BacklogService {
 			/**
 			 * Điền thông tin backlog và working report vào file schedule mới
 			 */
-			genSchedule(projectScheduleTemplate, projectCd, workingReports, backlogs);
+			genSchedule(projectScheduleTemplate, projectCd, pdsOrg, backlogs);
 		}
 		log.debug("All schedule created successfully.");
 	}
@@ -179,13 +180,13 @@ public class BacklogService {
 			final Pair<CustomerTarget, String> projectKey = Pair.of(cusTarget, pjCdJp);
 			List<PjjyujiDetail> pdList = new ArrayList<>();
 			List<BacklogDetail> bdList = new ArrayList<>();
-			final var iterator = pds.iterator();
 			if (result.containsKey(projectKey)) {
 				final var p = result.get(projectKey);
 				pdList = p.getLeft();
 				bdList = p.getRight();
 				bdList.add(bd);
 			}
+			final var iterator = pds.iterator();
 			while (iterator.hasNext()) {
 				final var item = iterator.next();
 				final var ankenNo = item.getAnkenNo();
