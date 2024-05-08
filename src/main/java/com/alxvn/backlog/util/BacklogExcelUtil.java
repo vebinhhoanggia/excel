@@ -84,6 +84,7 @@ public class BacklogExcelUtil {
 	private static final int targetMonthRowIdx = 7;
 	private static final int targetDateRowIdx = 8;
 	private static final int columnStartDateInputIdx = 17;
+	private static final int SCH_DEFAULT_ROW_CNT = 42;
 	private static final DateTimeFormatter FORMATTER_YYYYMMDD = DateTimeFormatter.ofPattern("yyyy/MM/dd");
 
 	private static final String templateFile = "QDA-0222a_プロジェクト管理表_{projectCd}.xlsm";
@@ -370,8 +371,10 @@ public class BacklogExcelUtil {
 		final var bottomRowIdx = bottomRow.getRowNum();
 
 		final var rIdxStartShift = bottomRowIdx;
-		// Dịch chuyển các dòng
-		sheet.shiftRows(rIdxStartShift, sheet.getLastRowNum(), cntRowInsert);
+		if (cntRowInsert >= 1) {
+			// Dịch chuyển các dòng
+			sheet.shiftRows(rIdxStartShift, sheet.getLastRowNum(), cntRowInsert);
+		}
 
 		/**
 		 * Copy format từ dòng trên cho các row được shift
@@ -640,6 +643,15 @@ public class BacklogExcelUtil {
 		return StringUtils.equals(ankenNo, pjjyujiDetail.getAnkenNo());
 	}
 
+	private Cell getCell(final Row curRow, final String colChar) {
+		final var cellIdx = CellReference.convertColStringToIndex(colChar);
+		var curCel = curRow.getCell(cellIdx);
+		if (curCel == null) {
+			curCel = curRow.createCell(cellIdx);
+		}
+		return curCel;
+	}
+
 	private void fillDataAfterMergeCell(final Sheet sheet, final String ankenNo, final int rowStart,
 			final List<BacklogDetail> backlogs, final List<PjjyujiDetail> pds) {
 
@@ -653,10 +665,10 @@ public class BacklogExcelUtil {
 			final var pic = backlogDetail.getMailId();
 			final var operation = getOperation(backlogDetail).map(WorkingPhase::getName).orElse(StringUtils.EMPTY);
 			// 工程 Operation
-			var curCel = curRow.getCell(CellReference.convertColStringToIndex(colOperationChar));
+			var curCel = getCell(curRow, colOperationChar);
 			curCel.setCellValue(operation);
 			// 担当 PIC
-			curCel = curRow.getCell(CellReference.convertColStringToIndex(columnPicCharacter));
+			curCel = getCell(curRow, columnPicCharacter);
 			curCel.setCellValue(pic);
 			// ステータス Status
 			// curCel =
@@ -665,35 +677,35 @@ public class BacklogExcelUtil {
 
 			// "予定 Schedule"
 			// 工数 Hours
-			curCel = curRow.getCell(CellReference.convertColStringToIndex(colExpectHousrChar));
+			curCel = getCell(curRow, colExpectHousrChar);
 			curCel.setCellValue(
 					Optional.ofNullable(backlogDetail.getEstimatedHours()).orElse(BigDecimal.ZERO).doubleValue());
 			// 開始日 Begin
-			curCel = curRow.getCell(CellReference.convertColStringToIndex(colExpectStartYmdChar));
+			curCel = getCell(curRow, colExpectStartYmdChar);
 			curCel.setCellValue(toDate(backlogDetail.getExpectedStartDate()));
 			// 完了日 End
-			curCel = curRow.getCell(CellReference.convertColStringToIndex(colExpectEndYmdChar));
+			curCel = getCell(curRow, colExpectEndYmdChar);
 			curCel.setCellValue(toDate(backlogDetail.getExpectedDueDate()));
 			// 納品日 Delivery
-			curCel = curRow.getCell(CellReference.convertColStringToIndex(colExpectDeliveryYmdChar));
+			curCel = getCell(curRow, colExpectDeliveryYmdChar);
 			curCel.setCellValue(toDate(backlogDetail.getExpectedDeliveryDate()));
 
 			// "実績 Actual"
 			// 工数 Hours
-			curCel = curRow.getCell(CellReference.convertColStringToIndex(colActualTotalHoursBacklogChar));
+			curCel = getCell(curRow, colActualTotalHoursBacklogChar);
 			curCel.setCellValue(
 					Optional.ofNullable(backlogDetail.getActualHours()).orElse(BigDecimal.ZERO).doubleValue());
 			// 開始日 Begin
-			curCel = curRow.getCell(CellReference.convertColStringToIndex(colActStartYmdChar));
+			curCel = getCell(curRow, colActStartYmdChar);
 			curCel.setCellValue(toDate(backlogDetail.getActualStartDate()));
 			// 完了日 End
-			curCel = curRow.getCell(CellReference.convertColStringToIndex(colActEndYmdChar));
+			curCel = getCell(curRow, colActEndYmdChar);
 			curCel.setCellValue(toDate(backlogDetail.getActualDueDate()));
 			// 進捗 Progress
-			curCel = curRow.getCell(CellReference.convertColStringToIndex(colActProgressChar));
+			curCel = getCell(curRow, colActProgressChar);
 			curCel.setCellValue(getProgress(backlogDetail.getProgress()));
 			// 納品日 Delivery
-			curCel = curRow.getCell(CellReference.convertColStringToIndex(colActDeliveryYmdChar));
+			curCel = getCell(curRow, colActDeliveryYmdChar);
 			curCel.setCellValue(toDate(backlogDetail.getActualDeliveryDate()));
 
 			// fill working report data
@@ -963,8 +975,14 @@ public class BacklogExcelUtil {
 		if (CollectionUtils.isEmpty(backlogs)) {
 			return;
 		}
+		final var defaultCurRow = SCH_DEFAULT_ROW_CNT;
+		var cntRowInsert = 0;
 		// thêm dòng trống cho đủ dòng để thực hiện các step sau.
-		insertNewRowForAll(sheet, backlogs.size());
+		final var backlogCnt = backlogs.size();
+		if (backlogCnt >= defaultCurRow) {
+			cntRowInsert = backlogCnt - defaultCurRow;
+		}
+		insertNewRowForAll(sheet, cntRowInsert);
 
 		fillBacklogAndWrData(sheet, backlogs, pds);
 
