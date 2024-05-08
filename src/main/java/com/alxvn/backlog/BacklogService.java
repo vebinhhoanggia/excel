@@ -119,6 +119,8 @@ public class BacklogService {
 	private void genSchedule(final List<PjjyujiDetail> pds, final List<BacklogDetail> bis) throws IOException {
 
 		final var projectMap = getListProject(pds, bis);
+//		bis.stream().filter(x -> StringUtils.containsIgnoreCase(x.getMilestone(), "03010791"))
+//				.collect(Collectors.toList());
 		for (final Map.Entry<Pair<CustomerTarget, String>, Pair<List<PjjyujiDetail>, List<BacklogDetail>>> entry : projectMap
 				.entrySet()) {
 			final var key = entry.getKey();
@@ -156,16 +158,23 @@ public class BacklogService {
 //				continue;
 			}
 			final var anken = bd.getAnkenNo();
+			final var milestone = bd.getMilestone();
 			final var targetCustomer = bd.getTargetCustomer();
 			if (StringUtils.isBlank(targetCustomer)) {
-				cusTarget = CustomerTarget.NONE;
-				if (StringUtils.containsIgnoreCase(anken, "sym")) {
+				if (StringUtils.containsIgnoreCase(milestone, "sym")) {
 					cusTarget = CustomerTarget.SYMPHONIZER;
-				}
-				if (StringUtils.containsIgnoreCase(anken, "i-front")
-						|| StringUtils.containsIgnoreCase(anken, "ifront")) {
+				} else if (StringUtils.containsIgnoreCase(milestone, "i-front")
+						|| StringUtils.containsIgnoreCase(milestone, "ifront")) {
 					cusTarget = CustomerTarget.IFRONT;
 				}
+			} else if (StringUtils.containsIgnoreCase(targetCustomer, "sym")) {
+				cusTarget = CustomerTarget.SYMPHONIZER;
+			} else if (StringUtils.containsIgnoreCase(targetCustomer, "i-front")
+					|| StringUtils.containsIgnoreCase(targetCustomer, "ifront")) {
+				cusTarget = CustomerTarget.IFRONT;
+			} else if (StringUtils.containsIgnoreCase(targetCustomer, "dmp")
+					|| StringUtils.containsIgnoreCase(targetCustomer, "katch")) {
+				cusTarget = CustomerTarget.DMP;
 			}
 			final Pair<CustomerTarget, String> projectKey = Pair.of(cusTarget, pjCdJp);
 			List<PjjyujiDetail> pdList = new ArrayList<>();
@@ -354,6 +363,13 @@ public class BacklogService {
 		return LocalDate.parse(str, FORMATTER_MMMDDYYYY);
 	}
 
+	private LocalDate parseBacklogCustomDate(final String str) {
+		if (StringUtils.isBlank(str)) {
+			return null;
+		}
+		return LocalDate.parse(str, FORMATTER_YYYYMMDD);
+	}
+
 	private String extractPjCdFromMileStone(final String ms, final String sj) {
 		final var regex = "(\\d{8})";
 
@@ -453,7 +469,7 @@ public class BacklogService {
 				// Access the values by column name
 				final var status = columnValues.get("Status");
 				if (StringUtils.equals(status, "Closed")) {
-					continue;
+//					continue;
 				}
 				final var columnKeyValue = columnValues.get("Key");
 				final var issueType = columnValues.get("Issue Type");
@@ -468,10 +484,10 @@ public class BacklogService {
 				final var estimatedHours = columnValues.get("Estimated Hours");
 				final var actualHours = columnValues.get("Actual Hours");
 				final var targetCustomer = columnValues.get("顧客");
-				final var expectedStartDate = parseBacklogDate(columnValues.get("開始予定日"));
-				final var expectedDueDate = parseBacklogDate(columnValues.get("完了予定日"));
+				final var expectedStartDate = parseBacklogCustomDate(columnValues.get("開始予定日"));
+				final var expectedDueDate = parseBacklogCustomDate(columnValues.get("完了予定日"));
 				final var progress = columnValues.get("進捗 Progress");
-				final var expectedDeliveryDate = parseBacklogDate(columnValues.get("納品予定日"));
+				final var expectedDeliveryDate = parseBacklogCustomDate(columnValues.get("納品予定日"));
 				final var processOfWr = columnValues.get("process(Of Wk Report)");
 //							final String column関連する課題Value = columnValues.get("関連する課題(親)");
 				final var bugCategory = columnValues.get("課題カテゴリ");
