@@ -5,6 +5,7 @@ package com.alxvn.backlog.util;
 
 import java.io.File;
 import java.text.DecimalFormat;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -261,5 +262,10 @@ public class ScheduleHelper {
 			return readContentFromMergedCells(sheet, cra);
 		}
 		return getCellValueAsString(cell);
+	}
+
+	public static LocalDate getTargetYmd(final Cell cell, final CellValue cellValue) {
+		final var date = getCellValueAsString(cell, cellValue);
+		return LocalDate.parse(date, FORMATTER_YYYYMMDD);
 	}
 }

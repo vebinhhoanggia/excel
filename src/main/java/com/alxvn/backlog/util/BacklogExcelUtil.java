@@ -4,10 +4,12 @@
 package com.alxvn.backlog.util;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -15,6 +17,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +31,8 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
+import org.apache.commons.lang3.tuple.Pair;
+import org.apache.poi.openxml4j.util.ZipSecureFile;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellValue;
 import org.apache.poi.ss.usermodel.DataFormatter;
@@ -74,6 +79,7 @@ public class BacklogExcelUtil {
 	private static final String colActEndYmdChar = "O";
 	private static final String colActProgressChar = "P";
 	private static final String colActDeliveryYmdChar = "Q";
+	private static final String colTemplateStartDate = "R";
 
 	private static final String totalCharacter = "Total";
 	private static final int columnAIndex = CellReference.convertColStringToIndex(columnACharacter);
@@ -83,11 +89,11 @@ public class BacklogExcelUtil {
 	private static final int columnStatusIndex = CellReference.convertColStringToIndex(columnStatusCharacter);
 	private static final int targetMonthRowIdx = 7;
 	private static final int targetDateRowIdx = 8;
-	private static final int columnStartDateInputIdx = 17;
+	private static final int columnStartDateInputIdx = CellReference.convertColStringToIndex(colTemplateStartDate);
 	private static final int SCH_DEFAULT_ROW_CNT = 42;
 	private static final DateTimeFormatter FORMATTER_YYYYMMDD = DateTimeFormatter.ofPattern("yyyy/MM/dd");
 
-	private static final String templateFile = "QDA-0222a_プロジェクト管理表_{projectCd}.xlsm";
+	private static final String templateFile = "QDA-0222a_プロジェクト管理表_{projectCd}_{range}.xlsm";
 	private static final String templateTotalActHours = "SUM(R{rIdx}:{cName}{rIdx})";
 	private static final String templateNextDateFormula = "{preCol}+1";
 
@@ -493,8 +499,17 @@ public class BacklogExcelUtil {
 	private void fillBacklogAndWrData(final Sheet sheet, final List<BacklogDetail> curBacklogs,
 			final List<PjjyujiDetail> pds) {
 		final var formulaEvaluator = sheet.getWorkbook().getCreationHelper().createFormulaEvaluator();
+
+//		final Map<String, List<BacklogDetail>> groupedBacklogs = curBacklogs.stream()
+//				.collect(Collectors.groupingBy(BacklogDetail::getAnkenNo));
+
 		final Map<String, List<BacklogDetail>> groupedBacklogs = curBacklogs.stream()
-				.collect(Collectors.groupingBy(BacklogDetail::getAnkenNo));
+				.collect(Collectors.groupingBy(BacklogDetail::getAnkenNo,
+						Collectors.collectingAndThen(Collectors.toList(),
+								list -> list.stream()
+										.sorted(Comparator.comparing(BacklogDetail::getActualStartDate,
+												Comparator.nullsFirst(Comparator.naturalOrder())))
+										.collect(Collectors.toList()))));
 
 		final List<String> ankens = new ArrayList<>();
 		for (final Map.Entry<String, List<BacklogDetail>> entry : groupedBacklogs.entrySet()) {
@@ -851,6 +866,18 @@ public class BacklogExcelUtil {
 				currentYm = currentYm.plusMonths(1);
 				isFirst = false;
 			}
+		} else {
+			// Sheet is old schedule
+			// Parse the date string to LocalDate
+			final var date = LocalDate.parse(lastTarget, DateTimeFormatter.ofPattern("yyyy/MM/dd"));
+
+			// Extract the YearMonth from LocalDate
+			final var yearMonth = YearMonth.from(date).plusMonths(1);
+			var currentYm = yearMonth;
+			while (currentYm.isBefore(targetYmE.plusMonths(1))) {
+				addColInput(sheet, currentYm, false);
+				currentYm = currentYm.plusMonths(1);
+			}
 		}
 	}
 
@@ -1047,23 +1074,23 @@ public class BacklogExcelUtil {
 			if (!ScheduleHelper.isScheduleSheet(sheet)) {
 				continue;
 			}
-			fillBacklogInfoForSheet(workbook, sheet, backlogPg, backlogSpec, backlogBug, pds);
+			fillScheduleInfo(workbook, sheet, backlogPg, backlogSpec, backlogBug, pds);
 		}
 	}
 
-	private void fillBacklogInfoForSheet(final Workbook workbook, final Sheet sheet, final List<BacklogDetail> pgs,
+	private void fillScheduleInfo(final Workbook workbook, final Sheet sheet, final List<BacklogDetail> pgs,
 			final List<BacklogDetail> specs, final List<BacklogDetail> bugs, final List<PjjyujiDetail> pds) {
 
 		final var sheetName = StringUtils.lowerCase(sheet.getSheetName());
 		log.debug("fillBacklogInfo.sheetName: {}", sheetName);
 
+		var datas = pgs;
 		if (StringUtils.equals(sheetName, "pg_spec")) {
-			fillData(workbook, sheet, specs, pds);
+			datas = specs;
 		} else if (StringUtils.equals(sheetName, "pg_bug")) {
-			fillData(workbook, sheet, bugs, pds);
-		} else {
-			fillData(workbook, sheet, pgs, pds);
+			datas = bugs;
 		}
+		fillData(workbook, sheet, datas, pds);
 
 		// Cập nhật lại công thức
 		updatedTotalActualHoursFormula(sheet);
@@ -1192,12 +1219,19 @@ public class BacklogExcelUtil {
 		}
 	}
 
-	private void fillRangeInputDetail(final List<PjjyujiDetail> pds, final Workbook workbook) {
-
+	private Pair<YearMonth, YearMonth> getRangeTarget(final List<PjjyujiDetail> pds) {
 		final var yearMonths = pds.stream().map(PjjyujiDetail::getTargetYmd).map(YearMonth::from).distinct().toList();
 		final var now = YearMonth.now();
 		final var ymS = yearMonths.stream().min(YearMonth::compareTo).orElse(now);
 		final var ymE = yearMonths.stream().max(YearMonth::compareTo).orElse(now);
+		return Pair.of(ymS, ymE);
+	}
+
+	private void fillRangeInputDetail(final List<PjjyujiDetail> pds, final Workbook workbook) {
+
+		final var yearMonths = getRangeTarget(pds);
+		final var ymS = yearMonths.getLeft();
+		final var ymE = yearMonths.getRight();
 
 		final var sheetIterator = workbook.sheetIterator();
 		while (sheetIterator.hasNext()) {
@@ -1223,27 +1257,102 @@ public class BacklogExcelUtil {
 
 		fillDetail(workbook, bds, pds);
 
-		fillWorkingReportInfo(pds, bds, workbook);
+//		fillWorkingReportInfo(pds, bds, workbook);
 
 		// Chạy lại toàn bộ công thức
 		evaluateAllFormula(workbook);
 	}
 
-	public void createSchedule(final String projecCd, final Path backlogSchedulePath, final List<PjjyujiDetail> pds,
-			final List<BacklogDetail> bds) {
+	public Path getLastSchedule(final Path projectSchPath) throws IOException {
+		final var filePattern = "QDA-0222a_プロジェクト管理表_(\\d{8})_(\\d{6})(?:_(\\d{6}))?\\.xlsm";
+
+		try (var directoryStream = Files.newDirectoryStream(projectSchPath)) {
+			Path lastFile = null;
+			var lastEndDate = YearMonth.from(LocalDate.MIN); // Initialize to a very early date
+			final var pattern = Pattern.compile(filePattern, Pattern.CANON_EQ);
+			final var dateFormatter = DateTimeFormatter.ofPattern("yyyyMM");
+
+			for (final Path file : directoryStream) {
+				if (Files.isRegularFile(file)) {
+					final var fileName = file.getFileName().toString();
+					final var matcher = pattern.matcher(fileName);
+
+					if (matcher.find()) {
+						final var group1 = matcher.group(1);
+						final var group2 = matcher.group(2);
+						final var group3 = matcher.group(3);
+						final var endYearMonthString = StringUtils.isNoneBlank(group3) ? group3 : group2;
+						final var endDate = YearMonth.parse(endYearMonthString, dateFormatter);
+
+						if (endDate.isAfter(lastEndDate)) {
+							lastFile = file;
+							lastEndDate = endDate;
+						}
+					}
+				}
+			}
+			return lastFile;
+		}
+	}
+
+	public void createSchedule(final String projecCd, final Path projectSchPath, final List<PjjyujiDetail> pds,
+			final List<BacklogDetail> bds) throws IOException {
 		log.debug("Bat dau tao schedule: {}", projecCd);
 
-		try (var fis = BacklogExcelUtil.class.getClassLoader().getResourceAsStream(scheduleTemplatePath);
+		// TODO: read old schedule if exists
+
+		final var lastSchePath = getLastSchedule(projectSchPath);
+		final var isUpdateSchedule = lastSchePath != null;
+		if (isUpdateSchedule) {
+			ZipSecureFile.setMinInflateRatio(0);
+		}
+		try (var fis = isUpdateSchedule ? new FileInputStream(lastSchePath.toFile())
+				: BacklogExcelUtil.class.getClassLoader().getResourceAsStream(scheduleTemplatePath);
 				Workbook workbook = new XSSFWorkbook(fis)) {
 
 			fillScheduleInfo(projecCd, pds, bds, workbook);
 
-			// Ghi dữ liệu vào tệp tin mới
-			final var schFilePath = saveToNewFileSchedule(workbook, projecCd, backlogSchedulePath);
+			// new file schedule
+			final var targetFile = createNewFileSchedule(projecCd, projectSchPath, pds);
+
+			// ghi vào file schedule mới
+			final var schFilePath = saveToNewFileSchedule(workbook, targetFile);
+
 			log.debug("Ket thuc tao schedule: {} - {}", projecCd, schFilePath);
 		} catch (final IOException e) {
 			e.printStackTrace();
 		}
+	}
+
+	private File createNewFileSchedule(final String projecCd, final Path projectSchPath,
+			final List<PjjyujiDetail> pds) {
+
+		final var yearMonths = getRangeTarget(pds);
+		final var ymS = yearMonths.getLeft();
+		final var ymE = yearMonths.getRight();
+		var sufFileName = "";
+
+		// Define the desired format
+		final var formatter = DateTimeFormatter.ofPattern("yyyyMM");
+
+		if (ymS.compareTo(ymE) == 0) {
+			sufFileName = ymS.format(formatter);
+		} else {
+			sufFileName = ymS.format(formatter) + "_" + ymE.format(formatter);
+		}
+		// Ghi dữ liệu vào tệp tin
+		final var fileName = StringUtils.replaceEach(templateFile, new String[] { "{projectCd}", "{range}" },
+				new String[] { projecCd, sufFileName });
+		// new file schedule
+		File targetFile = null;
+		if (projectSchPath != null) {
+			final var filePath = projectSchPath.resolve(fileName);
+			// Convert the Path object to a File object
+			targetFile = filePath.toFile();
+		} else {
+			targetFile = new File(fileName);
+		}
+		return targetFile;
 	}
 
 	/**
@@ -1255,20 +1364,7 @@ public class BacklogExcelUtil {
 	 * @throws FileNotFoundException
 	 * @throws IOException
 	 */
-	private String saveToNewFileSchedule(final Workbook workbook, final String pjCd, final Path scheduleFolerPath)
-			throws IOException {
-		// Ghi dữ liệu vào tệp tin
-		final var fileName = StringUtils.replaceEach(templateFile, new String[] { "{projectCd}", },
-				new String[] { pjCd });
-		// new file schedule
-		File targetFile = null;
-		if (scheduleFolerPath != null) {
-			final var filePath = scheduleFolerPath.resolve(fileName);
-			// Convert the Path object to a File object
-			targetFile = filePath.toFile();
-		} else {
-			targetFile = new File(fileName);
-		}
+	private String saveToNewFileSchedule(final Workbook workbook, final File targetFile) throws IOException {
 
 		try (var fileOut = new FileOutputStream(targetFile, false);) {
 

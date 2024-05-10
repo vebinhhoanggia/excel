@@ -604,19 +604,17 @@ public class BacklogService {
 
 	private void genSchedule(final String schPathTemplate, final String pjcd, final List<PjjyujiDetail> pds,
 			final List<BacklogDetail> bds) throws IOException {
-		if (StringUtils.isNotBlank(pjcd)) {
-			final var schedulePath = Paths.get(String.format(schPathTemplate, pjcd));
-			final var backlogSchedulePath = createFolderBacklogSchedule(schedulePath);
-			final var util = new BacklogExcelUtil();
-			util.createSchedule(pjcd, backlogSchedulePath, pds, bds);
-		} else {
+		if (StringUtils.isBlank(pjcd)) {
 			log.debug("Schedule.wr.isNotValid: {}", pds);
 			log.debug("Schedule.bl.isNotValid: {}", bds);
-			final var schedulePath = Paths.get(String.format(schPathTemplate, pjcd));
-			final var backlogSchedulePath = createFolderBacklogSchedule(schedulePath);
-			final var util = new BacklogExcelUtil();
-			util.createSchedule(pjcd, backlogSchedulePath, pds, bds);
 		}
+		final var projectSchPath = Paths.get(String.format(schPathTemplate, pjcd));
+		if (!Files.exists(projectSchPath)) {
+			Files.createDirectories(projectSchPath);
+		}
+//			final var backlogSchedulePath = createFolderBacklogSchedule(schedulePath);
+		final var util = new BacklogExcelUtil();
+		util.createSchedule(pjcd, projectSchPath, pds, bds);
 	}
 
 	public void updateSchedule(final String schPathTemplate, final String pjcd,

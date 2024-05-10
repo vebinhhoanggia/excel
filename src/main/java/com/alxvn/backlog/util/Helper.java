@@ -13,7 +13,7 @@ import org.apache.commons.lang3.StringUtils;
  */
 public class Helper {
 
-	public static String getAnkenNo(String content) {
+	public static String getAnkenNo(final String content) {
 		// use for redmine #xxxx
 		final var redminePattern = "#\\d+";
 		final var patternRedmine = Pattern.compile(redminePattern);
@@ -22,18 +22,18 @@ public class Helper {
 			return StringUtils.defaultString(matcherRedmine.group(0));
 		}
 		// use for backlog sym
-		final var backlogSymPattern = "SYMPHO-\\d+";
+		final var backlogSymPattern = "(SYMPHO-\\d+(#comment-\\d+)?)";
 		final var patternBacklog = Pattern.compile(backlogSymPattern);
 		final var matcherSymBacklog = patternBacklog.matcher(content);
 		if (matcherSymBacklog.find()) {
-			return StringUtils.defaultString(matcherSymBacklog.group(0));
+			return StringUtils.defaultString(matcherSymBacklog.group(1));
 		}
 		// use for backlog ifront
-		final var backlogifrontPattern = "IFRONT-\\d+";
+		final var backlogifrontPattern = "(IFRONT-\\d+(#comment-\\d+)?)";
 		final var patternIFrontBacklog = Pattern.compile(backlogifrontPattern);
 		final var matcherIfrontBacklog = patternIFrontBacklog.matcher(content);
 		if (matcherIfrontBacklog.find()) {
-			return StringUtils.defaultString(matcherIfrontBacklog.group(0));
+			return StringUtils.defaultString(matcherIfrontBacklog.group(1));
 		}
 
 		// using redmine
