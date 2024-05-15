@@ -3,48 +3,44 @@
  */
 package com.alxvn.backlog;
 
-import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.math.BigDecimal;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.poi.EncryptedDocumentException;
-import org.apache.poi.ss.usermodel.CellType;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.WorkbookFactory;
-import org.apache.poi.ss.util.CellRangeAddress;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.alxvn.backlog.behavior.BacklogBehavior;
 import com.alxvn.backlog.dto.BacklogDetail;
 import com.alxvn.backlog.dto.CustomerTarget;
 import com.alxvn.backlog.dto.PjjyujiDetail;
 import com.alxvn.backlog.dto.WorkingProcess;
 import com.alxvn.backlog.handle.IncorrectFullNameException;
-import com.alxvn.backlog.util.BacklogExcelUtil;
+import com.alxvn.backlog.schedule.BacklogExcel;
 import com.alxvn.backlog.util.Helper;
-import com.alxvn.backlog.util.ScheduleHelper;
 import com.alxvn.backlog.util.WorkingReportHelper;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
@@ -55,7 +51,7 @@ import com.opencsv.exceptions.CsvException;
  *
  */
 @Service
-public class BacklogService {
+public class BacklogService implements BacklogBehavior {
 
 	private static final Logger log = LoggerFactory.getLogger(BacklogService.class);
 
@@ -63,15 +59,8 @@ public class BacklogService {
 	private static final DateTimeFormatter FORMATTER_MMMDDYYYY = DateTimeFormatter.ofPattern("MMM. dd, yyyy",
 			Locale.ENGLISH);
 
-//	private static final String pathSymTemplate = "\\\\192.168.10.40\\project\\AllexceedJP\\Symphonizer\\Vietnamese\\%s\\05_keikaku";
-//	private static final String pathIfrontTemplate = "\\\\192.168.10.40\\project\\AllexceedJP\\i-Front\\Vietnamese\\%s\\05_keikaku";
-	private static final String pathSymTemplate = "D:\\Doc\\Backlog\\sym\\%s";
-	private static final String pathIfrontTemplate = "D:\\Doc\\Backlog\\ifront\\%s";
-	private static final String pathDefaultTemplate = "D:\\Doc\\Backlog\\default\\%s";
-	private static final String subFldName = "Backlog_%s";
-
-	public void stastics(final MultipartFile pjjyujiDataCsv, final MultipartFile backlogIssues,
-			final MultipartFile backlogGanttChart) throws IOException, CsvException, IncorrectFullNameException {
+	public void stastics(final MultipartFile pjjyujiDataCsv, final MultipartFile backlogIssues)
+			throws IOException, CsvException, IncorrectFullNameException {
 
 		List<PjjyujiDetail> pds = new ArrayList<>();
 		if (pjjyujiDataCsv != null) {
@@ -93,16 +82,6 @@ public class BacklogService {
 			}
 		}
 
-		if (backlogGanttChart != null) {
-			final var backlogGanttChartName = backlogGanttChart.getOriginalFilename();
-			if (StringUtils.isNotEmpty(backlogGanttChartName)
-					&& (backlogGanttChartName.endsWith(".xlsx") || backlogGanttChartName.endsWith(".xls"))) {
-				readBacklogGanttChart(backlogGanttChart);
-			} else {
-				//
-			}
-		}
-
 		genSchedule(pds, bds);
 	}
 
@@ -116,12 +95,71 @@ public class BacklogService {
 		log.debug("stastics END");
 	}
 
-	private void genSchedule(final List<PjjyujiDetail> pds, final List<BacklogDetail> bis) throws IOException {
+	private final Comparator<? super BacklogDetail> comparator = (o1, o2) -> {
+		if (o1 == null && o2 == null) {
+			return 0;
+		}
+		if (o1 == null) {
+			return -1;
+		}
+		if (o2 == null) {
+			return 1;
+		}
+		// So sánh theo trường field1
+		if (o1.getKey() == null && o2.getKey() == null) {
+			// Nếu cả hai trường field1 đều là null, tiếp tục so sánh trường tiếp theo
+		} else if (o1.getKey() == null) {
+			return -1;
+		} else if (o2.getKey() == null) {
+			return 1;
+		} else {
+			final var result = o1.getKey().compareTo(o2.getKey());
+			if (result != 0) {
+				return result;
+			}
+		}
 
+		// Nếu tất cả các trường đều bằng nhau, trả về kết quả là 0
+		return 0;
+	};
+
+	private void cleanRootFolderSchedule() throws IOException {
+		final var folderPath = BacklogExcel.pathRootFolder; // Specify the desired folder path
+
+		final var folder = Path.of(folderPath);
+		if (Files.exists(folder)) {
+			Files.walkFileTree(folder, new SimpleFileVisitor<>() {
+				@Override
+				public FileVisitResult visitFile(final Path file, final BasicFileAttributes attrs) throws IOException {
+					Files.delete(file);
+					return FileVisitResult.CONTINUE;
+				}
+
+				@Override
+				public FileVisitResult postVisitDirectory(final Path dir, final IOException exc) throws IOException {
+					Files.delete(dir);
+					return FileVisitResult.CONTINUE;
+				}
+			});
+			System.out.println("All files and directories within the folder have been deleted.");
+		} else {
+			Files.createDirectories(folder);
+			System.out.println("New folder created: " + folder);
+		}
+	}
+
+	private void genSchedule(final List<PjjyujiDetail> pds, final List<BacklogDetail> bis) throws IOException {
+		log.debug("Xử lý tạo file schedule !!!");
+		log.debug("Bắt đầu xử lý.");
 		final List<PjjyujiDetail> pdsOrg = new ArrayList<>(pds);
 		final var projectMap = getListProject(pds, bis);
-//		bis.stream().filter(x -> StringUtils.containsIgnoreCase(x.getMilestone(), "03010791"))
-//				.collect(Collectors.toList());
+
+		final var util = new BacklogExcel();
+
+		if (!util.isUpdateOldSchedule()) {
+			cleanRootFolderSchedule();
+		}
+
 		for (final Map.Entry<Pair<CustomerTarget, String>, Pair<List<PjjyujiDetail>, List<BacklogDetail>>> entry : projectMap
 				.entrySet()) {
 			final var key = entry.getKey();
@@ -131,52 +169,34 @@ public class BacklogService {
 			 */
 			final var projecType = key.getKey();
 			final var projectCd = key.getValue();
-			String projectScheduleTemplate = null;
-			projectScheduleTemplate = switch (projecType) {
-			case IFRONT -> pathIfrontTemplate;
-			case SYMPHONIZER -> pathSymTemplate;
-			default -> pathDefaultTemplate;
-			};
-			final var workingReports = val.getKey();
-			final var backlogs = val.getValue();
+//			final var workingReports = val.getKey();
+			final var backlogs = CollectionUtils.emptyIfNull(val.getValue()).stream().sorted(comparator)
+					.collect(Collectors.toList());
 
 			/**
 			 * Điền thông tin backlog và working report vào file schedule mới
 			 */
-			genSchedule(projectScheduleTemplate, projectCd, pdsOrg, backlogs);
+			if (StringUtils.isBlank(projectCd)) {
+				log.debug("Schedule.wr.isNotValid: {}", pdsOrg);
+				log.debug("Schedule.bl.isNotValid: {}", backlogs);
+			}
+			util.createSchedule(projecType, projectCd, pdsOrg, backlogs);
 		}
-		log.debug("All schedule created successfully.");
+		log.debug("Kết thúc xử lý.");
 	}
 
 	private Map<Pair<CustomerTarget, String>, Pair<List<PjjyujiDetail>, List<BacklogDetail>>> getListProject(
 			final List<PjjyujiDetail> pds, final List<BacklogDetail> bis) {
 //		<PJCD, PJCDJP>,
 		final Map<Pair<CustomerTarget, String>, Pair<List<PjjyujiDetail>, List<BacklogDetail>>> result = new HashMap<>();
-		var cusTarget = CustomerTarget.NONE;
 		for (final BacklogDetail bd : bis) {
 			final var pjCdJp = bd.getPjCdJp();
 			if (StringUtils.isBlank(pjCdJp)) {
 //				continue;
 			}
 			final var anken = bd.getAnkenNo();
-			final var milestone = bd.getMilestone();
-			final var targetCustomer = bd.getTargetCustomer();
-			if (StringUtils.isBlank(targetCustomer)) {
-				if (StringUtils.containsIgnoreCase(milestone, "sym")) {
-					cusTarget = CustomerTarget.SYMPHONIZER;
-				} else if (StringUtils.containsIgnoreCase(milestone, "i-front")
-						|| StringUtils.containsIgnoreCase(milestone, "ifront")) {
-					cusTarget = CustomerTarget.IFRONT;
-				}
-			} else if (StringUtils.containsIgnoreCase(targetCustomer, "sym")) {
-				cusTarget = CustomerTarget.SYMPHONIZER;
-			} else if (StringUtils.containsIgnoreCase(targetCustomer, "i-front")
-					|| StringUtils.containsIgnoreCase(targetCustomer, "ifront")) {
-				cusTarget = CustomerTarget.IFRONT;
-			} else if (StringUtils.containsIgnoreCase(targetCustomer, "dmp")
-					|| StringUtils.containsIgnoreCase(targetCustomer, "katch")) {
-				cusTarget = CustomerTarget.DMP;
-			}
+			final var cusTarget = resolveTarget(bd);
+
 			final Pair<CustomerTarget, String> projectKey = Pair.of(cusTarget, pjCdJp);
 			List<PjjyujiDetail> pdList = new ArrayList<>();
 			List<BacklogDetail> bdList = new ArrayList<>();
@@ -202,39 +222,6 @@ public class BacklogService {
 			result.put(projectKey, Pair.of(pdList, bdList));
 		}
 
-		// Danh sach cac working report con lai
-		for (final PjjyujiDetail pd : pds) {
-//			String targetCustomer = null;
-//
-//			final String pjCdJp = pd.getPjCdJp();
-//			final String anken = pd.getAnkenNo();
-//			if (StringUtils.contains(anken, "ifront")) {
-//				targetCustomer = "I-front";
-//			}
-//			final Pair<String, String> k = Pair.of(targetCustomer, pjCdJp);
-//			List<PjjyujiDetail> pdList = new ArrayList<>();
-//			List<BacklogDetail> bdList = new ArrayList<>();
-//			final Iterator<BacklogDetail> iterator = bis.iterator();
-//			if (result.containsKey(k)) {
-//				final Pair<List<PjjyujiDetail>, List<BacklogDetail>> p = result.get(k);
-//				pdList = p.getLeft();
-//				pdList.add(pd);
-//				bdList = p.getRight();
-//			}
-//			while (iterator.hasNext()) {
-//				final BacklogDetail item = iterator.next();
-//				final String ankenNo = item.getAnkenNo();
-//				if (StringUtils.equals(anken, ankenNo)) {
-//					bdList.add(item);
-//					iterator.remove(); // Xóa phần tử thỏa mãn điều kiện
-//				}
-//			}
-//			if (!result.containsKey(k)) {
-//				pdList = new ArrayList<>();
-//				pdList.add(pd);
-//			}
-//			result.put(k, Pair.of(pdList, bdList));
-		}
 		return result;
 	}
 
@@ -387,6 +374,20 @@ public class BacklogService {
 		return StringUtils.EMPTY;
 	}
 
+	private String extractProcess(final String text) {
+		if (StringUtils.isNotBlank(text)) {
+			final var regex = "(\\d+)";
+
+			final var pattern = Pattern.compile(regex);
+			final var matcher = pattern.matcher(text);
+
+			if (matcher.find()) {
+				return matcher.group(1);
+			}
+		}
+		return text;
+	}
+
 	private static final String[] backlogColumns = { //
 			"ID", //
 			"Project ID", //
@@ -427,7 +428,7 @@ public class BacklogService {
 			"顧客", // mã dự án
 			"開始予定日", //
 			"完了予定日", //
-			"進捗 Progress", //
+			"進捗", //
 			"納品予定日", //
 			"process(Of Wk Report)", //
 			"関連する課題(親)", //
@@ -459,20 +460,22 @@ public class BacklogService {
 			// Process each row
 			final var rows = csvReader.readAll();
 			for (final String[] row : rows) {
-				// Store the values of the desired columns in a map
 				final Map<String, String> columnValues = new HashMap<>();
-				for (var i = 0; i < columnIndices.length; i++) {
-					if (columnIndices[i] != null) {
-						columnValues.put(backlogColumns[i], row[columnIndices[i]]);
-					}
+				for (final Map.Entry<String, Integer> entry : columnIndexMap.entrySet()) {
+					final var key = entry.getKey();
+					final var val = entry.getValue();
+					columnValues.put(key, row[val]);
 				}
+				// Store the values of the desired columns in a map
+//				for (var i = 0; i < columnIndices.length; i++) {
+//					if (columnIndices[i] != null) {
+//						columnValues.put(backlogColumns[i], row[columnIndices[i]]);
+//					}
+//				}
 
 				// Access the values by column name
 				final var status = columnValues.get("Status");
-				if (StringUtils.equals(status, "Closed")) {
-//					continue;
-				}
-				final var columnKeyValue = columnValues.get("Key");
+				final var backlogKey = columnValues.get("Key");
 				final var issueType = columnValues.get("Issue Type");
 				final var category = columnValues.get("Category Name");
 				final var subject = columnValues.get("Subject");
@@ -485,9 +488,10 @@ public class BacklogService {
 				final var estimatedHours = columnValues.get("Estimated Hours");
 				final var actualHours = columnValues.get("Actual Hours");
 				final var targetCustomer = columnValues.get("顧客");
+				final var targetTaskId = columnValues.get("課題");
 				final var expectedStartDate = parseBacklogCustomDate(columnValues.get("開始予定日"));
 				final var expectedDueDate = parseBacklogCustomDate(columnValues.get("完了予定日"));
-				final var progress = columnValues.get("進捗 Progress");
+				final var progress = extractProcess(columnValues.get("進捗"));
 				final var expectedDeliveryDate = parseBacklogCustomDate(columnValues.get("納品予定日"));
 				final var processOfWr = columnValues.get("process(Of Wk Report)");
 //							final String column関連する課題Value = columnValues.get("関連する課題(親)");
@@ -496,9 +500,10 @@ public class BacklogService {
 				final var bugCreator = columnValues.get("課題発生者");
 				final var bug3rdTest = columnValues.get("課題発生第三者");
 
-				final var detail = new BacklogDetail.Builder().key(columnKeyValue) //
+				final var ankenNo = StringUtils.defaultIfBlank(targetTaskId, Helper.getAnkenNo(subject));
+				final var detail = new BacklogDetail.Builder().key(backlogKey) //
 						.issueType(issueType) //
-						.ankenNo(Helper.getAnkenNo(subject)) //
+						.ankenNo(ankenNo) //
 						.mailId(WorkingReportHelper.getMailIdFromFullName(assignee)) //
 						.pjCdJp(extractPjCdFromMileStone(milestone, subject)) //
 						.category(category) //
@@ -549,149 +554,28 @@ public class BacklogService {
 		}
 	}
 
-	private List<String> readBacklogGanttChart(final MultipartFile file) {
-		final List<String> fileData = new ArrayList<>();
-
-//		final Workbook workbook = WorkbookFactory.create(file.getInputStream());
-//		final Sheet sheet = workbook.getSheetAt(0);
-//		for (final Row row : sheet) {
-//			for (final Cell cell : row) {
-//				final String cellValue = cell.toString();
-//				fileData.add(cellValue);
-//			}
-//		}
-//		workbook.close();
-
-		return fileData;
-	}
-
-	/**
-	 * Tạo thư mục chứa schedule được tạo từ backlog
-	 *
-	 * @param schedulePath
-	 * @return
-	 * @throws IOException
-	 */
-	private Path createFolderBacklogSchedule(final Path schedulePath) throws IOException {
-		final var formatter = DateTimeFormatter.ofPattern("yyyyMM");
-
-		// Format the LocalDateTime object to a string using the formatter
-		final var folderName = LocalDateTime.now().format(formatter);
-		final var subfolderPath = schedulePath.resolve(String.format(subFldName, folderName));
-		// Create the subfolder
-		Files.createDirectories(subfolderPath);
-		return subfolderPath;
-	}
-
-	private Path backupSch(final Path schedulePath) throws IOException {
-		final var subfolderPath = schedulePath.resolve(String.format(subFldName, LocalDateTime.now()));
-		// Create the subfolder
-		Files.createDirectory(subfolderPath);
-
-		try (var walkStream = Files.walk(schedulePath)) {
-			walkStream.filter(Files::isRegularFile) // Only take files
-					.filter(file -> ScheduleHelper.isValidSchFileName(file.toFile())) //
-					.forEach(file -> {
-						try {
-							Files.copy(file, subfolderPath.resolve(file.getFileName())); //
-						} catch (final IOException e) {
-							throw new IllegalArgumentException("Backup schedule:", e);
-						}
-					});
-		}
-		return subfolderPath;
-	}
-
-	private void genSchedule(final String schPathTemplate, final String pjcd, final List<PjjyujiDetail> pds,
-			final List<BacklogDetail> bds) throws IOException {
-		if (StringUtils.isBlank(pjcd)) {
-			log.debug("Schedule.wr.isNotValid: {}", pds);
-			log.debug("Schedule.bl.isNotValid: {}", bds);
-		}
-		final var projectSchPath = Paths.get(String.format(schPathTemplate, pjcd));
-		if (!Files.exists(projectSchPath)) {
-			Files.createDirectories(projectSchPath);
-		}
-//			final var backlogSchedulePath = createFolderBacklogSchedule(schedulePath);
-		final var util = new BacklogExcelUtil();
-		util.createSchedule(pjcd, projectSchPath, pds, bds);
-	}
-
-	public void updateSchedule(final String schPathTemplate, final String pjcd,
-			final Pair<List<PjjyujiDetail>, List<BacklogDetail>> data) throws IOException {
-		final var schedulePath = Paths.get(String.format(schPathTemplate, pjcd));
-		// Check if the file or directory exists
-		final var exists = Files.exists(schedulePath);
-		if (!exists) {
-			return;
-		}
-		final var targetPath = backupSch(schedulePath);
-		final var pds = data.getLeft();
-		final var bds = data.getRight();
-
-		final List<PjjyujiDetail> pdSame = new ArrayList<>();
-		final List<BacklogDetail> bdSame = new ArrayList<>();
-
-		final var pdt = pds.iterator();
-		while (pdt.hasNext()) {
-			final var item = pdt.next();
-			final var ankenNo = item.getAnkenNo();
-			if (bds.stream().anyMatch(x -> StringUtils.equals(ankenNo, x.getAnkenNo()))) {
-				pdSame.add(item);
-				pdt.remove(); // Xóa phần tử thỏa mãn điều kiện
+	@Override
+	public CustomerTarget resolveTarget(final BacklogDetail bd) {
+		var cusTarget = CustomerTarget.NONE;
+		final var milestone = bd.getMilestone();
+		final var targetCustomer = bd.getTargetCustomer();
+		if (StringUtils.isBlank(targetCustomer)) {
+			if (StringUtils.containsIgnoreCase(milestone, "sym")) {
+				cusTarget = CustomerTarget.SYMPHONIZER;
+			} else if (StringUtils.containsIgnoreCase(milestone, "i-front")
+					|| StringUtils.containsIgnoreCase(milestone, "ifront")) {
+				cusTarget = CustomerTarget.IFRONT;
 			}
+		} else if (StringUtils.containsIgnoreCase(targetCustomer, "sym")) {
+			cusTarget = CustomerTarget.SYMPHONIZER;
+		} else if (StringUtils.containsIgnoreCase(targetCustomer, "i-front")
+				|| StringUtils.containsIgnoreCase(targetCustomer, "ifront")) {
+			cusTarget = CustomerTarget.IFRONT;
+		} else if (StringUtils.containsIgnoreCase(targetCustomer, "dmp")
+				|| StringUtils.containsIgnoreCase(targetCustomer, "katch")) {
+			cusTarget = CustomerTarget.DMP;
 		}
-
-		final var bdt = bds.iterator();
-		while (bdt.hasNext()) {
-			final var item = bdt.next();
-			final var ankenNo = item.getAnkenNo();
-			if (pdSame.stream().anyMatch(x -> StringUtils.equals(ankenNo, x.getAnkenNo()))) {
-				bdSame.add(item);
-				bdt.remove(); // Xóa phần tử thỏa mãn điều kiện
-			}
-		}
-		// TODO: xu ly du lieu dau vao
-		// List PjjyujiDetail, BacklogDetail ton tai o backlog, wr => pdSame, bdSame
-		// List PjjyujiDetail khong ton tai o backlog => pds
-		// List BacklogDetail khong ton tai o wr => bds
-		try (var fileStream = Files.walk(targetPath)) {
-			fileStream.filter(Files::isRegularFile).forEach(filePath -> {
-				try (InputStream inputStream = new BufferedInputStream(Files.newInputStream(filePath));
-						var workbook = WorkbookFactory.create(inputStream)) {
-					if (Objects.isNull(workbook)) {
-						log.debug("Schedule.isNotValid: {}", filePath);
-						return;
-					}
-					final var evaluator = workbook.getCreationHelper().createFormulaEvaluator();
-					final var columnToSearch = 2; // Column index (0-based) to search
-					final var searchText = "";
-					for (final Sheet sheet : workbook) {
-						for (final CellRangeAddress mergedRegion : sheet.getMergedRegions()) {
-							if (mergedRegion.isInRange(0, columnToSearch)) {
-								for (var row = mergedRegion.getFirstRow(); row <= mergedRegion.getLastRow(); row++) {
-									final var sheetRow = sheet.getRow(row);
-									if (sheetRow != null) {
-										final var cell = sheetRow.getCell(columnToSearch);
-										if (cell != null && cell.getCellType() == CellType.STRING) {
-											final var cellValue = cell.getStringCellValue();
-											if (cellValue.equals(searchText)) {
-												System.out.println("Merged cell found: " + mergedRegion);
-												break;
-											}
-										}
-									}
-								}
-							}
-						}
-
-					}
-
-				} catch (EncryptedDocumentException | IOException e) {
-					throw new IllegalArgumentException("update schedule:", e);
-				}
-			});
-		}
+		return cusTarget;
 	}
 
 }

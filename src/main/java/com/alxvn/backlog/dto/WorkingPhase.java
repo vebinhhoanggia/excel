@@ -29,7 +29,7 @@ public enum WorkingPhase implements EnumCodeable {
 	, ID46("46", "Tech Research") //
 	, ID47("47", "Estimate Hour") //
 	, ID48("48", "Source Review") //
-	, ID49("49", "3rd Test") //
+	, ID49("49", "Test") //
 	, ID50("50", "Progress management") //
 	, ID51("51", "Progress report") //
 	, ID52("52", "Internal meeting") //
@@ -39,6 +39,7 @@ public enum WorkingPhase implements EnumCodeable {
 	, ID56("56", "Learning") //
 	, ID57("57", "Internal member support") //
 	, ID58("58", "Outsource support") //
+	, ID0("0", "Not expected") //
 
 	/* */
 	;
@@ -57,10 +58,10 @@ public enum WorkingPhase implements EnumCodeable {
 		return stringToEnum.get(s);
 	}
 
-	private String code;
-	private String name;
+	private final String code;
+	private final String name;
 
-	WorkingPhase(String code, String name) {
+	WorkingPhase(final String code, final String name) {
 		this.code = code;
 		this.name = name;
 	}

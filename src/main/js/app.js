@@ -186,7 +186,7 @@ class GenSchedule extends React.Component {
 					return Upload.LIST_IGNORE;
 				}
 				this.setState((prevState) => ({
-					file1List: [...prevState.file1List, file],
+					file1List: [file],
 				}));
 				return false;
 			},
@@ -205,7 +205,7 @@ class GenSchedule extends React.Component {
 					return Upload.LIST_IGNORE;
 				}
 				this.setState((prevState) => ({
-					file2List: [...prevState.file2List, file],
+					file2List: [file],
 				}));
 				return false;
 			},
@@ -288,7 +288,7 @@ class GenSchedule extends React.Component {
 									onClick={this.handleSubmit}
 									size="large"
 								>
-									Stastics
+									generate
 								</Button>
 							</FormItem>
 						</Col>

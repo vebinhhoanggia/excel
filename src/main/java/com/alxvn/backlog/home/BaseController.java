@@ -17,7 +17,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.alxvn.backlog.BacklogService;
 import com.alxvn.backlog.config.ApiVersion;
 import com.alxvn.backlog.handle.IncorrectFullNameException;
-import com.alxvn.backlog.util.BacklogExcelUtil;
+import com.alxvn.backlog.schedule.BacklogExcel;
 import com.opencsv.exceptions.CsvException;
 
 /**
@@ -35,7 +35,7 @@ public class BaseController {
 
 	@GetMapping("genSchedule")
 	public String stastics() {
-		final var util = new BacklogExcelUtil();
+		final var util = new BacklogExcel();
 		final var wrPath = "templates/pjjyuji_data_csv_20240415.csv";
 		final var backlogPath = "templates/Backlog-Issues-20240415-1157.csv";
 		util.createScheduleFromBacklog(wrPath, backlogPath);
@@ -52,7 +52,7 @@ public class BaseController {
 //		final var backlogPath = "templates/Backlog-Issues-20240415-1157.csv";
 //		util.createScheduleFromBacklog(wrPath, backlogPath);
 
-		backlogService.stastics(file1, file2, null);
+		backlogService.stastics(file1, file2);
 
 		return ResponseEntity.ok("create schedule successfully");
 	}
