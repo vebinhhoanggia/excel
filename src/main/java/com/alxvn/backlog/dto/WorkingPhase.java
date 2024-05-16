@@ -18,7 +18,7 @@ public enum WorkingPhase implements EnumCodeable {
 	, ID8("8", "Outline Design") //
 	, ID9("9", "Detail Design") //
 	, ID10("10", "PG") // PG
-	, ID11("11", "Unit Test") //
+	, ID11("11", "UT") //
 	, ID24("24", "Delivery") // Delivery
 	, ID40("40", "QA") //
 	, ID41("41", "Acceptance Verification") //
@@ -28,7 +28,7 @@ public enum WorkingPhase implements EnumCodeable {
 	, ID45("45", "Spec change") //
 	, ID46("46", "Tech Research") //
 	, ID47("47", "Estimate Hour") //
-	, ID48("48", "Source Review") //
+	, ID48("48", "Review") //
 	, ID49("49", "Test") //
 	, ID50("50", "Progress management") //
 	, ID51("51", "Progress report") //

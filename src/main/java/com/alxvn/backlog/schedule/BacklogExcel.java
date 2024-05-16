@@ -21,6 +21,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -249,6 +250,38 @@ public class BacklogExcel implements GenSchedule {
 		}
 		// Set the value for the cell
 		c.setCellValue(ankenNo);
+	}
+
+	private void setValForMergeCell(final Sheet sheet, final CellRangeAddress mergeCellRange, int colIdx,
+			final String strVal) {
+		final var firstRow = mergeCellRange.getFirstRow();
+		final var fRow = firstRow;
+		// Create a new cell within the merged region
+		var r = sheet.getRow(fRow);
+		if (r == null) {
+			r = sheet.createRow(fRow);
+		}
+		var c = r.getCell(colIdx);
+		if (c == null) {
+			c = r.createCell(colIdx);
+		}
+		// Set the value for the cell
+		c.setCellValue(strVal);
+	}
+
+	private void setValForSingleCell(final Sheet sheet, final int rowIdx, int colIdx, final String strVal) {
+		final var fRow = rowIdx;
+		// Create a new cell within the merged region
+		var r = sheet.getRow(fRow);
+		if (r == null) {
+			r = sheet.createRow(fRow);
+		}
+		var c = r.getCell(colIdx);
+		if (c == null) {
+			c = r.createCell(colIdx);
+		}
+		// Set the value for the cell
+		c.setCellValue(strVal);
 	}
 
 	private void setAnkeNoValue(final Sheet sheet, final int firstRow, final String ankenNo) {
@@ -653,7 +686,7 @@ public class BacklogExcel implements GenSchedule {
 
 		/**
 		 * Thực hiện loop từng anken để insert thêm dòng mới và điền thông tin.
-		 * 
+		 *
 		 */
 		for (final String currentAnkenNo : existedAnken) {
 			// Them record moi vao cac anken da ton tai trong schedule
@@ -1206,8 +1239,8 @@ public class BacklogExcel implements GenSchedule {
 	 */
 	public static void main(final String[] args) {
 		final var obj = new BacklogExcel();
-		final var wrPath = "templates/pjjyuji_data_csv_20240415.csv";
-		final var backlogPath = "templates/Backlog-Issues-20240415-1157.csv";
+		final var wrPath = "templates/pjjyuji_data_csv_20240509.csv";
+		final var backlogPath = "templates/Backlog-Issues-20240514-1217.csv";
 		obj.createScheduleFromBacklog(wrPath, backlogPath);
 	}
 
@@ -1220,51 +1253,122 @@ public class BacklogExcel implements GenSchedule {
 		}
 	}
 
-	private void fillData(final Workbook workbook, final Sheet sheet, final List<BacklogDetail> backlogs,
+	private void fillData(final Workbook workbook, final Sheet sheet, final List<BacklogDetail> allBacklogs,
 			final List<PjjyujiDetail> pds) {
-		if (CollectionUtils.isEmpty(backlogs)) {
+		if (CollectionUtils.isEmpty(allBacklogs)) {
 			return;
 		}
+		var groupedBacklogs = groupByParentKey(allBacklogs);
+
+		List<String> backlogParentKeysList = new ArrayList<>(groupedBacklogs.keySet());
+
+		var backlogKeyExists = getCurrentBacklogKeyExists(sheet);
+
 		final var formulaEvaluator = workbook.getCreationHelper().createFormulaEvaluator();
 		final var dataFormatter = new DataFormatter();
-		final var ai = new AtomicInteger();
-		var isFirstBlank = false;
-		var isStop = false;
-		for (final Row row : sheet) {
-			if (isHeader(row)) {
+		final var i = new AtomicInteger(0);
+		final var parentKeyIdx = new AtomicInteger();
+		while (MapUtils.isNotEmpty(groupedBacklogs)) {
+			sheet.getSheetName();
+			var curIdx = i.getAndIncrement();
+			var row = sheet.getRow(curIdx);
+			// skip xử lý khi đang đọc các dòng header
+			if (row == null || isHeader(row)) {
 				continue;
 			}
-			// skip xử lý khi đang đọc các dòng header
-			final var cell = row.getCell(columnAnkenIndex);
-			if (cell != null) {
-				formulaEvaluator.evaluate(cell);
-				final var formattedCellValue = dataFormatter.formatCellValue(cell, formulaEvaluator);
+			final var backlogKeyVal = StringUtils.trim(StringUtils.defaultString(dataFormatter.formatCellValue(
+					row.getCell(CellReference.convertColStringToIndex(colBacklogIdChar)), formulaEvaluator)));
+			var groupCell = row.getCell(columnBIndex);
+			if (groupCell != null) {
+				formulaEvaluator.evaluate(groupCell);
+				final var backlogGroupKey = dataFormatter.formatCellValue(groupCell, formulaEvaluator);
+				var isExists = StringUtils.isNotBlank(backlogGroupKey) && groupedBacklogs.containsKey(backlogGroupKey);
 
-				// Check if the value matches the desired value
-				if (StringUtils.isBlank(formattedCellValue) && !isFirstBlank) {
-					isFirstBlank = true;
-				}
-				if (isFirstBlank) {
-					if (StringUtils.isNotBlank(formattedCellValue) && !isStop) {
-						isStop = true;
+				final var mergeCellRange = ScheduleHelper.getMergedRegionForCell(groupCell);
+				var isSingleRecord = mergeCellRange == null;
+
+				// T/h tồn tại thực hiện cập nhật thông tin, thêm dòng mới, merge cell lại
+				if (isExists) {
+					// update atomic value after fill
+					if (isSingleRecord) {
+						// Update thông tin.
+
+						// Add dòng mới nếu có
+
+						// Merge lại cell
+					} else {
+						// Lấy phạm vi của MergeCell
+						final var firstRow = mergeCellRange.getFirstRow();
+						final var lastRow = mergeCellRange.getLastRow();
+
+						// update thông tin
+
+						// Thêm dòng mới nếu có
+
+						// Merge lại cell
+					}
+				} else {
+					// Thêm mới thông tin
+					var curParentKeyIdx = parentKeyIdx.getAndIncrement(); // Lấy ra idx của backlog parent key tăng dần
+					if (curParentKeyIdx >= backlogParentKeysList.size()) {
 						break;
 					}
-					ai.incrementAndGet();
+					var curBacklogParentKey = backlogParentKeysList.get(curParentKeyIdx); // Lấy ra parent key
+					final var backlogs = groupedBacklogs.get(curBacklogParentKey);
+					groupedBacklogs.remove(curBacklogParentKey);
+
+					// Lấy ra ticket no
+					var curAnkenNo = backlogs.stream().findFirst().map(BacklogDetail::getAnkenNo).orElse("");
+					final Integer totalRow = backlogs.size();
+//					row.getCell(columnAIndex).setCellValue(curIdx + 1); // fill number no
+
+					// Dịch chuyển các dòng
+					var startRowShift = curIdx + 1;
+					var numberOfRowsToShift = totalRow - 1;
+					if (numberOfRowsToShift > 0) {
+						sheet.shiftRows(startRowShift, sheet.getLastRowNum(), numberOfRowsToShift);
+
+						// Tạo dòng mới sau khi dịch chuyển
+						for (var j = startRowShift; j < startRowShift + numberOfRowsToShift; j++) {
+							final var newRow = sheet.createRow(j);
+							cloneRowFormat(row, newRow);
+						}
+					}
+
+					if (totalRow == 1) {
+						setValForSingleCell(sheet, curIdx, columnBIndex, curBacklogParentKey);
+						fillDataAfterMergeCell(sheet, curAnkenNo, curIdx, backlogs, pds);
+					} else {
+
+						final var fRow = curIdx;
+						final var lRow = fRow + numberOfRowsToShift;
+						// merge cell
+						// Column No
+						var newMergedRegion = new CellRangeAddress(fRow, lRow, columnAIndex, columnAIndex);
+						sheet.addMergedRegion(newMergedRegion);
+						// Column "グループ Group"
+						newMergedRegion = new CellRangeAddress(fRow, lRow, columnBIndex, columnBIndex);
+						sheet.addMergedRegion(newMergedRegion);
+						setValForMergeCell(sheet, newMergedRegion, columnBIndex, curBacklogParentKey);
+
+						// Column "画面ID Screen ID"
+						newMergedRegion = new CellRangeAddress(fRow, lRow, columnAnkenIndex, columnAnkenIndex);
+						sheet.addMergedRegion(newMergedRegion);
+						setValForMergeCell(sheet, newMergedRegion, columnAnkenIndex, curAnkenNo);
+
+						// Column "画面名 Screen Name"
+						newMergedRegion = new CellRangeAddress(fRow, lRow, columnScreenIndex, columnScreenIndex);
+						sheet.addMergedRegion(newMergedRegion);
+						// Column "ステータス Status"
+						newMergedRegion = new CellRangeAddress(fRow, lRow, columnStatusIndex, columnStatusIndex);
+						sheet.addMergedRegion(newMergedRegion);
+						final var rowStart = newMergedRegion.getFirstRow();
+						fillDataAfterMergeCell(sheet, curAnkenNo, rowStart, backlogs, pds);
+					}
+					i.addAndGet(totalRow);
 				}
 			}
 		}
-		// TODO: Lấy lượng record còn trống.
-		final var defaultCurRow = SCH_DEFAULT_ROW_CNT;
-		var cntRowInsert = 0;
-		// thêm dòng trống cho đủ dòng để thực hiện các step sau.
-		final var backlogCnt = backlogs.size();
-		if (backlogCnt >= defaultCurRow) {
-			cntRowInsert = backlogCnt - defaultCurRow;
-		}
-		// TODO: Đối ứng t/h đọc old schedule.
-		insertNewRowForAll(sheet, cntRowInsert);
-
-		fillBacklogAndWrData(sheet, backlogs, pds);
 
 		evaluate(workbook, sheet);
 
@@ -1297,15 +1401,18 @@ public class BacklogExcel implements GenSchedule {
 		final var wrBugCd = WorkingPhase.ID43.getCode();
 		return StringUtils.equals(wrBugCd, processOfWrCd);
 	};
+
 	private final Predicate<BacklogDetail> isBacklogSpec = backlogDetail -> {
 		final var processOfWrCd = extracProcessOfWrCd(backlogDetail.getProcessOfWr());
 		final var wrBugCd = WorkingPhase.ID45.getCode();
 		return StringUtils.equals(wrBugCd, processOfWrCd);
 	};
+
 	private final Predicate<BacklogDetail> isBacklogPg = backlogDetail -> isBacklogBug.negate()
 			.and(isBacklogSpec.negate()).test(backlogDetail);
 
-	private void fillDetail(final Workbook workbook, final List<BacklogDetail> bds, final List<PjjyujiDetail> pds) {
+	private void fillBacklogDetailInfo(final Workbook workbook, final List<BacklogDetail> bds,
+			final List<PjjyujiDetail> pds) {
 
 		final var backlogBug = bds.stream() //
 				.filter(isBacklogBug) //
@@ -1326,11 +1433,11 @@ public class BacklogExcel implements GenSchedule {
 			if (!ScheduleHelper.isScheduleSheet(sheet)) {
 				continue;
 			}
-			fillScheduleInfo(workbook, sheet, backlogPg, backlogSpec, backlogBug, pds);
+			genScheduleInfoForSheet(workbook, sheet, backlogPg, backlogSpec, backlogBug, pds);
 		}
 	}
 
-	private void fillScheduleInfo(final Workbook workbook, final Sheet sheet, final List<BacklogDetail> pgs,
+	private void genScheduleInfoForSheet(final Workbook workbook, final Sheet sheet, final List<BacklogDetail> pgs,
 			final List<BacklogDetail> specs, final List<BacklogDetail> bugs, final List<PjjyujiDetail> pds) {
 
 		final var sheetName = StringUtils.lowerCase(sheet.getSheetName());
@@ -1361,7 +1468,7 @@ public class BacklogExcel implements GenSchedule {
 		return Pair.of(ymS, ymE);
 	}
 
-	private void fillRangeInputDetail(final List<PjjyujiDetail> pds, final Workbook workbook) {
+	private void createRangeWorkingReportDetail(final List<PjjyujiDetail> pds, final Workbook workbook) {
 
 		final var yearMonths = getRangeTarget(pds);
 		final var ymS = yearMonths.getLeft();
@@ -1387,9 +1494,9 @@ public class BacklogExcel implements GenSchedule {
 	private void fillScheduleInfo(final String projectCd, final List<PjjyujiDetail> pds, final List<BacklogDetail> bds,
 			final Workbook workbook) {
 
-		fillRangeInputDetail(pds, workbook);
+		createRangeWorkingReportDetail(pds, workbook);
 
-		fillDetail(workbook, bds, pds);
+		fillBacklogDetailInfo(workbook, bds, pds);
 
 		// Chạy lại toàn bộ công thức
 		evaluateAllFormula(workbook);
@@ -1537,5 +1644,37 @@ public class BacklogExcel implements GenSchedule {
 	@Override
 	public boolean isUpdateOldSchedule() {
 		return true;
+	}
+
+	private Map<String, List<BacklogDetail>> groupByParentKey(List<BacklogDetail> details) {
+		Map<String, List<BacklogDetail>> groupedBacklogs = new HashMap<>();
+
+		for (BacklogDetail obj : details) {
+			if (StringUtils.isNotBlank(obj.getParentKey())) {
+				groupedBacklogs.computeIfAbsent(obj.getParentKey(), key -> new ArrayList<>()).add(obj);
+			}
+		}
+		return groupedBacklogs;
+	}
+
+	private List<String> getCurrentBacklogKeyExists(final Sheet sheet) {
+		final var formulaEvaluator = sheet.getWorkbook().getCreationHelper().createFormulaEvaluator();
+		final var dataFormatter = new DataFormatter();
+
+		List<String> result = new ArrayList<>();
+		for (final Row row : sheet) {
+			if (isHeader(row)) {
+				continue;
+			}
+			final var backlogKeyVal = StringUtils.trim(StringUtils.defaultString(dataFormatter.formatCellValue(
+					row.getCell(CellReference.convertColStringToIndex(colBacklogIdChar)), formulaEvaluator)));
+			if (StringUtils.isNotBlank(backlogKeyVal)) {
+				result.add(backlogKeyVal);
+			}
+			if (isTotalRow(row)) {
+				break;
+			}
+		}
+		return result;
 	}
 }
