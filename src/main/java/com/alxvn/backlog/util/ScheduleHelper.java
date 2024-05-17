@@ -7,6 +7,7 @@ import java.io.File;
 import java.text.DecimalFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -14,15 +15,18 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.poi.EncryptedDocumentException;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.CellValue;
 import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.FormulaError;
+import org.apache.poi.ss.usermodel.FormulaEvaluator;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.ss.util.CellReference;
 import org.apache.poi.ss.util.CellUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -270,5 +274,85 @@ public class ScheduleHelper {
 	public static LocalDate getTargetYmd(final Cell cell, final CellValue cellValue) {
 		final var date = getCellValueAsString(cell, cellValue);
 		return LocalDate.parse(date, FORMATTER_YYYYMMDD);
+	}
+
+	public static Row getScheTitleRow(final Sheet sheet) {
+		for (final Row row : sheet) {
+			if (row == null) {
+				continue;
+			}
+			final var cell = CellUtil.getCell(row, CellReference.convertColStringToIndex("A"));
+			final var no = getCellValueAsString(cell);
+			if (StringUtils.equals(no, "No")) {
+				return row;
+			}
+		}
+		throw new IllegalArgumentException("Sheet " + sheet.getSheetName() + " khong co dong title");
+	}
+
+	public static Pair<Integer, Integer> findRangeColIndex(final FormulaEvaluator evaluator, final Sheet sheet,
+			final YearMonth targetMonthStart, final YearMonth targetMonthEnd) {
+		log.debug("findRangeColIndex: {}: {}-{}", sheet.getSheetName(), targetMonthStart, targetMonthEnd);
+		if (Objects.isNull(targetMonthStart)) {
+			return null;
+		}
+		if (targetMonthStart.isAfter(targetMonthEnd)) {
+			return null;
+		}
+		final var schTitleRow = getScheTitleRow(sheet);
+
+		// Check have row of target month
+		Integer colStart = null;
+		Integer colEnd = null;
+
+		final var cellIterator = schTitleRow.cellIterator();
+		while (cellIterator.hasNext()) {
+			final var c = cellIterator.next();
+			if (c == null) {
+				// The spreadsheet is empty in this cell
+				continue;
+			}
+
+			// TODO: using DataFormatter
+//			final DataFormatter dataFormatter = new DataFormatter();
+//			final String cellValue = dataFormatter.formatCellValue(c, evaluator);
+//			final LocalDate date = LocalDate.parse(cellValue, FORMATTER_YYYYMMDD);
+//			final YearMonth yearMonth = YearMonth.from(date);
+
+			try {
+				final var yearMonth = YearMonth
+						.from(LocalDate.parse(getCellValueAsString(c, evaluator.evaluate(c)), FORMATTER_YYYYMMDD));
+				final var isStart = yearMonth.equals(targetMonthStart);
+				final var isEnd = yearMonth.equals(targetMonthEnd);
+				if (yearMonth.isBefore(targetMonthStart)) {
+					continue;
+				}
+				if (isStart && colStart == null) {
+					colStart = c.getColumnIndex(); // first cell match target month
+				}
+				if (isEnd) {
+					colEnd = c.getColumnIndex();
+				}
+				if (yearMonth.isAfter(targetMonthEnd)) {
+					break;
+				}
+			} catch (final Exception e) {
+				// Handle exception or log error if necessary
+			}
+		}
+
+		if (Objects.isNull(colStart) || Objects.isNull(colEnd)) {
+			log.debug("findRangeColIndex.warn.can't detect range: {}", sheet.getSheetName());
+			return null;
+		}
+
+		final var sCol = cellColName(colStart);
+		final var eCol = cellColName(colEnd);
+		log.debug("findRangeColIndex.isvalid: {} -- {} - {}", sheet.getSheetName(), sCol, eCol);
+		return Pair.of(colStart, colEnd);
+	}
+
+	private static String cellColName(final Integer columnIndex) {
+		return CellReference.convertNumToColString(columnIndex);
 	}
 }

@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -196,6 +197,9 @@ public class BacklogService implements BacklogBehavior {
 			}
 			final var anken = bd.getAnkenNo();
 			final var cusTarget = resolveTarget(bd);
+			if (!cusTarget.equals(CustomerTarget.NONE) || !StringUtils.equals("03010776", pjCdJp)) {
+				continue;
+			}
 
 			final Pair<CustomerTarget, String> projectKey = Pair.of(cusTarget, pjCdJp);
 			List<PjjyujiDetail> pdList = new ArrayList<>();
@@ -221,8 +225,21 @@ public class BacklogService implements BacklogBehavior {
 			}
 			result.put(projectKey, Pair.of(pdList, bdList));
 		}
+		// Create a TreeMap to store the sorted map
+		final Map<Pair<CustomerTarget, String>, Pair<List<PjjyujiDetail>, List<BacklogDetail>>> sortedResult = new TreeMap<>(
+				(pair1, pair2) -> {
+					// Compare the CustomerTarget objects
+					final var targetComparison = pair1.getLeft().compareTo(pair2.getLeft());
 
-		return result;
+					if (targetComparison != 0) {
+						return targetComparison;
+					}
+
+					// Compare the String objects
+					return pair1.getRight().compareTo(pair2.getRight());
+				});
+		sortedResult.putAll(result);
+		return sortedResult;
 	}
 
 	private static final String[] workingReportColumns = { //

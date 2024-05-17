@@ -35,6 +35,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.poi.openxml4j.util.ZipSecureFile;
+import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellValue;
 import org.apache.poi.ss.usermodel.DataFormatter;
@@ -201,6 +202,17 @@ public class BacklogExcel implements GenSchedule {
 		};
 	}
 
+	private void setDefaultValForRow(final Row curRow) {
+		var curCel = getCell(curRow, columnStatusCharacter);
+		curCel.setCellValue("未着手");
+		curCel = getCell(curRow, colExpectHousrChar);
+		curCel.setCellValue(0);
+		curCel = getCell(curRow, colActualTotalHoursBacklogChar);
+		curCel.setCellValue(0);
+		curCel = getCell(curRow, colActProgressChar);
+		curCel.setCellValue(0);
+	}
+
 	/*
 	 *
 	 */
@@ -211,9 +223,12 @@ public class BacklogExcel implements GenSchedule {
 			final var newCell = newRow.createCell(column); // Create a new cell in the new row
 			if (sourceCell != null) {
 				final var sourceCellStyle = sourceCell.getCellStyle(); // Get the cell style of the source cell
+				sourceCellStyle.setBorderTop(BorderStyle.THIN);
+				sourceCellStyle.setBorderBottom(BorderStyle.THIN);
 				newCell.setCellStyle(sourceCellStyle); // Set the cell style to the new cell
 			}
 		}
+		setDefaultValForRow(newRow);
 	}
 
 	private void setValForMergeCell(final Sheet sheet, final CellRangeAddress mergeCellRange, final int colIdx,
@@ -283,13 +298,17 @@ public class BacklogExcel implements GenSchedule {
 		curCel.setCellValue(indexNo.get());
 		// "グループ Group"
 		final var parentKey = Optional.ofNullable(backlogDetail).map(BacklogDetail::getParentKey)
-				.orElse(StringUtils.EMPTY);
-		curCel = getCell(curRow, columnBCharacter);
-		curCel.setCellValue(parentKey);
+				.orElse(Optional.ofNullable(backlogDetail).map(BacklogDetail::getKey).orElse(StringUtils.EMPTY));
+		if (StringUtils.isNotBlank(parentKey)) {
+			curCel = getCell(curRow, columnBCharacter);
+			curCel.setCellValue(parentKey);
+		}
 		// "画面ID Screen ID"
 		final var ankenNo = Optional.ofNullable(backlogDetail).map(BacklogDetail::getAnkenNo).orElse(StringUtils.EMPTY);
-		curCel = getCell(curRow, columnAnkenCharacter);
-		curCel.setCellValue(ankenNo);
+		if (StringUtils.isNotBlank(ankenNo)) {
+			curCel = getCell(curRow, columnAnkenCharacter);
+			curCel.setCellValue(ankenNo);
+		}
 		// 工程 Operation
 		final var operation = getOperation(backlogDetail).map(WorkingPhase::getName).orElse(StringUtils.EMPTY);
 		curCel = getCell(curRow, colOperationChar);
@@ -417,6 +436,7 @@ public class BacklogExcel implements GenSchedule {
 				isFirst = false;
 			}
 		} else {
+			clearOldValueWr(sheet, targetYmS, targetYmE);
 			// Sheet is old schedule
 			// Parse the date string to LocalDate
 			final var date = LocalDate.parse(lastTarget, DateTimeFormatter.ofPattern("yyyy/MM/dd"));
@@ -429,6 +449,43 @@ public class BacklogExcel implements GenSchedule {
 				currentYm = currentYm.plusMonths(1);
 			}
 		}
+	}
+
+	private void clearOldValueWr(final Sheet sheet, final YearMonth targetYmS, final YearMonth targetYmE) {
+		final var row = sheet.getRow(targetMonthRowIdx);
+		final var formulaEvaluator = row.getSheet().getWorkbook().getCreationHelper().createFormulaEvaluator();
+		final var colStartEnd = ScheduleHelper.findRangeColIndex(formulaEvaluator, sheet, targetYmS, targetYmE);
+		if (colStartEnd == null) {
+			return;
+		}
+		final int colStartIdx = colStartEnd.getLeft();
+		final int colEndIdx = colStartEnd.getRight();
+		for (final Row r : sheet) {
+			if (isHeader(r)) {
+				continue;
+			}
+			for (final Cell cell : r) {
+				if (cell == null) {
+					continue;
+				}
+
+				final var curColIdx = cell.getColumnIndex();
+				if (curColIdx < colStartIdx) {
+					continue;
+				}
+				if (curColIdx <= colEndIdx) {
+					cell.setCellValue((String) null);
+				}
+				if (curColIdx > colEndIdx) {
+					break;
+				}
+			}
+			if (isTotalRow(r)) {
+				break;
+			}
+
+		}
+
 	}
 
 	private void addColInput(final Sheet sheet, final YearMonth targetYm, final boolean isFirstTargetMonth) {
@@ -550,6 +607,7 @@ public class BacklogExcel implements GenSchedule {
 		}
 		final var groupedBacklogs = groupByParentKey(allBacklogs);
 		final var formulaEvaluator = workbook.getCreationHelper().createFormulaEvaluator();
+		formulaEvaluator.evaluateAll();
 		final var dataFormatter = new DataFormatter();
 
 		final var i = new AtomicInteger(0);
@@ -568,16 +626,20 @@ public class BacklogExcel implements GenSchedule {
 			}
 
 //			log.debug("Sheet {} curLastRowNum {}", sheet.getSheetName(), sheet.getLastRowNum());
-			log.debug("Sheet {} at row {} - {}", sheet.getSheetName(), curIdx, groupedBacklogs.size());
+			log.debug("Sheet {} at row {} - remain group {}", sheet.getSheetName(), curIdx, groupedBacklogs.size());
 
 			final var groupCell = row.getCell(columnBIndex);
-			formulaEvaluator.evaluate(groupCell);
+			sheet.getMergedRegions();
+			final var mergeCellRange = ScheduleHelper.getMergedRegionForCell(groupCell);
+//			formulaEvaluator.evaluate(groupCell);
 			var curBacklogParentKey = dataFormatter.formatCellValue(groupCell, formulaEvaluator);
+			final var isSingleRecord = mergeCellRange == null;
+			if (!isSingleRecord) {
+				curBacklogParentKey = StringUtils.trim(ScheduleHelper.readContentCell(sheet, groupCell));
+			}
 			final var isExists = StringUtils.isNotBlank(curBacklogParentKey)
 					&& groupedBacklogs.containsKey(curBacklogParentKey);
 
-			final var mergeCellRange = ScheduleHelper.getMergedRegionForCell(groupCell);
-			final var isSingleRecord = mergeCellRange == null;
 			var numberOfRowsToShift = 0;
 			// T/h tồn tại thực hiện cập nhật thông tin, thêm dòng mới, merge cell lại
 			if (isExists) {
@@ -637,6 +699,7 @@ public class BacklogExcel implements GenSchedule {
 						// Column No
 						var newMergedRegion = new CellRangeAddress(fRow, lRow, columnAIndex, columnAIndex);
 						sheet.addMergedRegion(newMergedRegion);
+
 						// Column "グループ Group"
 						newMergedRegion = new CellRangeAddress(fRow, lRow, columnBIndex, columnBIndex);
 						sheet.addMergedRegion(newMergedRegion);
@@ -650,6 +713,7 @@ public class BacklogExcel implements GenSchedule {
 						// Column "画面名 Screen Name"
 						newMergedRegion = new CellRangeAddress(fRow, lRow, columnScreenIndex, columnScreenIndex);
 						sheet.addMergedRegion(newMergedRegion);
+
 						// Column "ステータス Status"
 						newMergedRegion = new CellRangeAddress(fRow, lRow, columnStatusIndex, columnStatusIndex);
 						sheet.addMergedRegion(newMergedRegion);
@@ -713,36 +777,37 @@ public class BacklogExcel implements GenSchedule {
 
 						stepCnt++;
 					}
+					if (!newBacklogs.isEmpty()) {
+						final var fRow = curIdx;
+						final var lRow = fRow + curRowCnt + numberOfRowsToShift - 1;
 
-					final var fRow = curIdx;
-					final var lRow = fRow + curRowCnt + numberOfRowsToShift - 1;
-
-					// unmerge cell
-					for (var k = sheet.getNumMergedRegions() - 1; k >= 0; k--) {
-						final var mergedRegion = sheet.getMergedRegion(k);
-						if (compareCellRangeAddresses(mergedRegion, mergeCellRange)) {
-							sheet.removeMergedRegion(k);
+						// unmerge cell
+						for (var k = sheet.getNumMergedRegions() - 1; k >= 0; k--) {
+							final var mergedRegion = sheet.getMergedRegion(k);
+							if (compareCellRangeAddresses(mergedRegion, mergeCellRange)) {
+								sheet.removeMergedRegion(k);
+							}
 						}
+
+						// merge cell
+						// Column No
+						var newMergedRegion = new CellRangeAddress(fRow, lRow, columnAIndex, columnAIndex);
+						sheet.addMergedRegion(newMergedRegion);
+						// Column "グループ Group"
+						newMergedRegion = new CellRangeAddress(fRow, lRow, columnBIndex, columnBIndex);
+						sheet.addMergedRegion(newMergedRegion);
+
+						// Column "画面ID Screen ID"
+						newMergedRegion = new CellRangeAddress(fRow, lRow, columnAnkenIndex, columnAnkenIndex);
+						sheet.addMergedRegion(newMergedRegion);
+
+						// Column "画面名 Screen Name"
+						newMergedRegion = new CellRangeAddress(fRow, lRow, columnScreenIndex, columnScreenIndex);
+						sheet.addMergedRegion(newMergedRegion);
+						// Column "ステータス Status"
+						newMergedRegion = new CellRangeAddress(fRow, lRow, columnStatusIndex, columnStatusIndex);
+						sheet.addMergedRegion(newMergedRegion);
 					}
-
-					// merge cell
-					// Column No
-					var newMergedRegion = new CellRangeAddress(fRow, lRow, columnAIndex, columnAIndex);
-					sheet.addMergedRegion(newMergedRegion);
-					// Column "グループ Group"
-					newMergedRegion = new CellRangeAddress(fRow, lRow, columnBIndex, columnBIndex);
-					sheet.addMergedRegion(newMergedRegion);
-
-					// Column "画面ID Screen ID"
-					newMergedRegion = new CellRangeAddress(fRow, lRow, columnAnkenIndex, columnAnkenIndex);
-					sheet.addMergedRegion(newMergedRegion);
-
-					// Column "画面名 Screen Name"
-					newMergedRegion = new CellRangeAddress(fRow, lRow, columnScreenIndex, columnScreenIndex);
-					sheet.addMergedRegion(newMergedRegion);
-					// Column "ステータス Status"
-					newMergedRegion = new CellRangeAddress(fRow, lRow, columnStatusIndex, columnStatusIndex);
-					sheet.addMergedRegion(newMergedRegion);
 				}
 
 				// tăng index xử lý sau khi xử lý thêm dòng
@@ -1106,6 +1171,8 @@ public class BacklogExcel implements GenSchedule {
 		for (final BacklogDetail obj : details) {
 			if (StringUtils.isNotBlank(obj.getParentKey())) {
 				groupedBacklogs.computeIfAbsent(obj.getParentKey(), key -> new ArrayList<>()).add(obj);
+			} else {
+				groupedBacklogs.computeIfAbsent(obj.getKey(), key -> new ArrayList<>()).add(obj);
 			}
 		}
 		return groupedBacklogs;
