@@ -236,6 +236,9 @@ public class ScheduleHelper {
 	}
 
 	public static CellRangeAddress getMergedRegionForCell(final Cell c) {
+		if (c == null) {
+			return null;
+		}
 		final var s = c.getRow().getSheet();
 		for (final CellRangeAddress mergedRegion : s.getMergedRegions()) {
 			if (mergedRegion.isInRange(c.getRowIndex(), c.getColumnIndex())) {
