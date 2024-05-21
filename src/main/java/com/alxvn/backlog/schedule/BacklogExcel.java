@@ -223,9 +223,12 @@ public class BacklogExcel implements GenSchedule {
 			final var newCell = newRow.createCell(column); // Create a new cell in the new row
 			if (sourceCell != null) {
 				final var sourceCellStyle = sourceCell.getCellStyle(); // Get the cell style of the source cell
-				sourceCellStyle.setBorderTop(BorderStyle.THIN);
-				sourceCellStyle.setBorderBottom(BorderStyle.THIN);
 				newCell.setCellStyle(sourceCellStyle); // Set the cell style to the new cell
+				final var newCellStyle = newCell.getCellStyle(); // Get the cell style of the source cell
+				if (column == CellReference.convertColStringToIndex(colActHousrChar)) {
+					newCellStyle.setBorderTop(BorderStyle.THIN);
+					newCellStyle.setBorderBottom(BorderStyle.THIN);
+				}
 			}
 		}
 		setDefaultValForRow(newRow);
@@ -978,6 +981,7 @@ public class BacklogExcel implements GenSchedule {
 		} else if (StringUtils.equals(sheetName, "pg_bug")) {
 			datas = bugs;
 		}
+
 		fillDataForSheet(workbook, sheet, datas, pds);
 
 		// Cập nhật lại công thức

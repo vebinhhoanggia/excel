@@ -174,7 +174,7 @@ public class BacklogService implements BacklogBehavior {
 		log.debug("Xử lý tạo file schedule !!!");
 		log.debug("Bắt đầu xử lý.");
 		final List<PjjyujiDetail> pdsOrg = new ArrayList<>(pds);
-		final var projectMap = getListProject(pds, bis);
+		final var projectMap = getMapProject(pds, bis);
 
 		final var util = new BacklogExcel();
 
@@ -353,7 +353,7 @@ public class BacklogService implements BacklogBehavior {
 		}
 	}
 
-	private Map<Pair<CustomerTarget, String>, Pair<List<PjjyujiDetail>, List<BacklogDetail>>> getListProject(
+	private Map<Pair<CustomerTarget, String>, Pair<List<PjjyujiDetail>, List<BacklogDetail>>> getMapProject(
 			final List<PjjyujiDetail> pds, final List<BacklogDetail> bis) {
 //		<PJCD, PJCDJP>,
 		final Map<Pair<CustomerTarget, String>, Pair<List<PjjyujiDetail>, List<BacklogDetail>>> result = new HashMap<>();
