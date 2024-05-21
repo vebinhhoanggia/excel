@@ -113,17 +113,31 @@ class GenSchedule extends React.Component {
 					headers: {
 						"Content-Type": "multipart/form-data",
 					},
+					responseType: 'blob'
 				})
 				.then((response) => {
 					const config = {
 						title: 'title',
-						content: response.data,
+						content: '',
 						okText: 'ＯＫ',
 						onOk() {
 							() => { };
 						},
 					};
 					this.openModalInfo(config);
+					
+					// const blob = new Blob([response.data], { type: response.headers['content-type'] });
+					const filename = this.extractFileName(
+						response.headers["content-disposition"]
+					);
+					const downloadUrl = window.URL.createObjectURL(new Blob([response.data]));
+					// const downloadUrl = URL.createObjectURL(blob);
+					const link = document.createElement('a');
+					link.href = downloadUrl;
+					link.setAttribute('download', filename);
+					document.body.appendChild(link);
+					link.click();
+					link.remove();
 				})
 				.catch((error) => {
 					// handle error
@@ -163,6 +177,21 @@ class GenSchedule extends React.Component {
 		const newFileList = fileList.slice();
 		newFileList.splice(index, 1);
 		this.setState({ [fieldName]: newFileList });
+	}
+
+	extractFileName(contentDispositionValue) {
+		var filename = "";
+		if (
+			contentDispositionValue &&
+			contentDispositionValue.indexOf("attachment") !== -1
+		) {
+			var filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+			var matches = filenameRegex.exec(contentDispositionValue);
+			if (matches != null && matches[1]) {
+				filename = matches[1].replace(/['"]/g, "");
+			}
+		}
+		return filename;
 	}
 
 	render() {
@@ -240,7 +269,7 @@ class GenSchedule extends React.Component {
 					}
 					return "";
 				})()}
-				<h1>BACKLOG STASTICS</h1>
+				<h1>GENERATE BACKLOG SCHEDULE</h1>
 				<Form
 					layout="horizontal"
 					initialValues={{}}

@@ -9,6 +9,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -53,7 +54,7 @@ public class BaseController {
 	}
 
 	@PostMapping(value = "genSchedule")
-	public ResponseEntity<String> genSchedule(@RequestParam("file1") final MultipartFile file1,
+	public ResponseEntity<InputStreamResource> genSchedule(@RequestParam("file1") final MultipartFile file1,
 			@RequestParam("file2") final MultipartFile file2)
 			throws IOException, CsvException, IncorrectFullNameException {
 
@@ -62,9 +63,11 @@ public class BaseController {
 //		final var backlogPath = "templates/Backlog-Issues-20240415-1157.csv";
 //		util.createScheduleFromBacklog(wrPath, backlogPath);
 
-		backlogService.stastics(file1, file2);
+		final var rootFldResult = backlogService.stastics(file1, file2);
 
-		return ResponseEntity.ok("create schedule successfully");
+		return backlogService.zipFolder(rootFldResult);
+
+//		return ResponseEntity.ok("create schedule successfully");
 	}
 
 }

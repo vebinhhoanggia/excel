@@ -4,34 +4,53 @@
 package com.alxvn.backlog;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+
+import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StreamUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.alxvn.backlog.behavior.BacklogBehavior;
@@ -60,7 +79,7 @@ public class BacklogService implements BacklogBehavior {
 	private static final DateTimeFormatter FORMATTER_MMMDDYYYY = DateTimeFormatter.ofPattern("MMM. dd, yyyy",
 			Locale.ENGLISH);
 
-	public void stastics(final MultipartFile pjjyujiDataCsv, final MultipartFile backlogIssues)
+	public String stastics(final MultipartFile pjjyujiDataCsv, final MultipartFile backlogIssues)
 			throws IOException, CsvException, IncorrectFullNameException {
 
 		List<PjjyujiDetail> pds = new ArrayList<>();
@@ -83,7 +102,7 @@ public class BacklogService implements BacklogBehavior {
 			}
 		}
 
-		genSchedule(pds, bds);
+		return genSchedule(pds, bds);
 	}
 
 	public void stastics(final String workingReportFilePath, final String backlogIssuesFilePath)
@@ -124,7 +143,7 @@ public class BacklogService implements BacklogBehavior {
 		return 0;
 	};
 
-	private void cleanRootFolderSchedule() throws IOException {
+	private String cleanRootFolderSchedule() throws IOException {
 		final var folderPath = BacklogExcel.pathRootFolder; // Specify the desired folder path
 
 		final var folder = Path.of(folderPath);
@@ -147,9 +166,11 @@ public class BacklogService implements BacklogBehavior {
 			Files.createDirectories(folder);
 			System.out.println("New folder created: " + folder);
 		}
+		return folderPath;
 	}
 
-	private void genSchedule(final List<PjjyujiDetail> pds, final List<BacklogDetail> bis) throws IOException {
+	@SuppressWarnings("static-access")
+	private String genSchedule(final List<PjjyujiDetail> pds, final List<BacklogDetail> bis) throws IOException {
 		log.debug("Xử lý tạo file schedule !!!");
 		log.debug("Bắt đầu xử lý.");
 		final List<PjjyujiDetail> pdsOrg = new ArrayList<>(pds);
@@ -183,7 +204,153 @@ public class BacklogService implements BacklogBehavior {
 			}
 			util.createSchedule(projecType, projectCd, pdsOrg, backlogs);
 		}
-		log.debug("Kết thúc xử lý.");
+		log.debug("Kết thúc xử lý tạo file schedule !!!");
+		if (util.isExportZip()) {
+			return util.pathRootFolder;
+		}
+		return StringUtils.EMPTY;
+	}
+
+	public void generateZipFile(final HttpServletResponse response, final String folderPath) {
+		if (StringUtils.isBlank(folderPath)) {
+			return;
+		}
+		response.setContentType("application/octet-stream");
+		response.setHeader("Content-Disposition", "attachment;filename=download.zip");
+		response.setStatus(HttpServletResponse.SC_OK);
+
+		response.setContentType("application/octet-stream");
+		response.setHeader("Content-Disposition", "attachment;filename=download.zip");
+		response.setStatus(HttpServletResponse.SC_OK);
+
+		try (var zippedOut = new ZipOutputStream(response.getOutputStream())) {
+			addFilesToZip(zippedOut, Paths.get(folderPath));
+			zippedOut.finish();
+		} catch (final IOException e) {
+			// Handle exceptions here
+		}
+	}
+
+	public static void zipFolderByPath(final String folderPath, final String outputZipFile) {
+		try {
+			final List<Path> filesToZip = new ArrayList<>();
+			Files.walk(Paths.get(folderPath)).filter(Files::isRegularFile).forEach(filesToZip::add);
+
+			try (var zipOutputStream = new ZipOutputStream(new FileOutputStream(outputZipFile))) {
+				for (final Path filePath : filesToZip) {
+					final var entryName = folderPath.substring(folderPath.lastIndexOf("/") + 1) + "/"
+							+ filePath.getFileName().toString();
+					zipOutputStream.putNextEntry(new ZipEntry(entryName));
+
+					try (var fileInputStream = new FileInputStream(filePath.toFile())) {
+						int read;
+						while ((read = fileInputStream.read()) != -1) {
+							zipOutputStream.write(read);
+						}
+					}
+					zipOutputStream.closeEntry();
+				}
+			}
+		} catch (final IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	public ResponseEntity<InputStreamResource> zipFolder(final String folderPath) {
+		log.debug("Bắt đầu xử lý tạo zip file !!!");
+		if (StringUtils.isBlank(folderPath)) {
+			return ResponseEntity.noContent().build();
+		}
+
+		try (var byteArrayOutputStream = new ByteArrayOutputStream()) {
+			zipFolder(folderPath, byteArrayOutputStream);
+			final var inputStream = new ByteArrayInputStream(byteArrayOutputStream.toByteArray());
+			final var resource = new InputStreamResource(inputStream);
+
+			final var headers = new HttpHeaders();
+			headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+			headers.setContentDisposition(ContentDisposition.builder("attachment").filename("download.zip").build());
+			log.debug("Kết thúc xử lý zip file !!!");
+			return new ResponseEntity<>(resource, headers, HttpStatus.OK);
+		} catch (final IOException e) {
+			// Handle exceptions here
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+		}
+	}
+
+	public void zipFolder(final String folderPath, final OutputStream outputStream) throws IOException {
+		final var path = Paths.get(folderPath);
+		try (var zipOutputStream = new ZipOutputStream(outputStream)) {
+			addFolderToZip(zipOutputStream, path, "");
+		}
+	}
+
+	private void addFolderToZip(final ZipOutputStream zipOutputStream, final Path path, final String basePath)
+			throws IOException {
+		final Deque<Path> directories = new LinkedList<>();
+		directories.offerFirst(path);
+
+		while (!directories.isEmpty()) {
+			final var currentPath = directories.pollFirst();
+			final var relativePath = basePath + path.relativize(currentPath).toString();
+
+			if (Files.isDirectory(currentPath)) {
+				zipOutputStream.putNextEntry(new ZipEntry(relativePath + "/"));
+				zipOutputStream.closeEntry();
+
+				try (var dirStream = Files.list(currentPath)) {
+					dirStream.forEach(directories::offerLast);
+				}
+			} else {
+				zipOutputStream.putNextEntry(new ZipEntry(relativePath));
+				Files.copy(currentPath, zipOutputStream);
+				zipOutputStream.closeEntry();
+			}
+		}
+	}
+
+	public ResponseEntity<InputStreamResource> generateZipFile(final String folderPath) {
+		if (StringUtils.isBlank(folderPath)) {
+			return ResponseEntity.noContent().build();
+		}
+		final var outputZipFile = folderPath + "/folder.zip";
+		zipFolderByPath(folderPath, outputZipFile);
+
+		return ResponseEntity.noContent().build();
+//		try (var byteArrayOutputStream = new ByteArrayOutputStream();
+//				var zipOutputStream = new ZipOutputStream(byteArrayOutputStream)) {
+//			addFilesToZip(zipOutputStream, Paths.get(folderPath));
+//
+//			final var zipBytes = byteArrayOutputStream.toByteArray();
+//			final var zipInputStream = new ByteArrayInputStream(zipBytes);
+//			final var resource = new InputStreamResource(zipInputStream);
+//
+//			final var headers = new HttpHeaders();
+//			headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+//			headers.setContentDisposition(ContentDisposition.builder("attachment").filename("download.zip").build());
+//
+//			return new ResponseEntity<>(resource, headers, HttpStatus.OK);
+//		} catch (final IOException e) {
+//			// Handle exceptions here
+//			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+//		}
+	}
+
+	private void addFilesToZip(final ZipOutputStream zipOutputStream, final Path basePath) {
+		try (var stream = Files.walk(basePath)) {
+			stream.filter(Files::isRegularFile).forEach(file -> {
+				try (var inputStream = Files.newInputStream(file)) {
+					final var zipEntry = new ZipEntry(basePath.relativize(file).toString());
+					zipOutputStream.putNextEntry(zipEntry);
+					StreamUtils.copy(inputStream, zipOutputStream);
+					zipOutputStream.closeEntry();
+				} catch (final IOException e) {
+					// Handle any exceptions that may occur during file addition
+				}
+			});
+		} catch (final IOException e) {
+			// Handle any exceptions that may occur during the file walk
+		}
 	}
 
 	private Map<Pair<CustomerTarget, String>, Pair<List<PjjyujiDetail>, List<BacklogDetail>>> getListProject(
@@ -198,9 +365,9 @@ public class BacklogService implements BacklogBehavior {
 			final var anken = bd.getAnkenNo();
 			final var cusTarget = resolveTarget(bd);
 			// for test
-//			if (!cusTarget.equals(CustomerTarget.NONE) || !StringUtils.equals("03010776", pjCdJp)) {
-//				continue;
-//			}
+			if (!cusTarget.equals(CustomerTarget.NONE) || !StringUtils.equals("03010776", pjCdJp)) {
+				continue;
+			}
 			final Pair<CustomerTarget, String> projectKey = Pair.of(cusTarget, pjCdJp);
 			List<PjjyujiDetail> pdList = new ArrayList<>();
 			List<BacklogDetail> bdList = new ArrayList<>();

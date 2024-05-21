@@ -1188,4 +1188,9 @@ public class BacklogExcel implements GenSchedule {
 		return groupedBacklogs;
 	}
 
+	@Override
+	public boolean isExportZip() {
+		return true;
+	}
+
 }
