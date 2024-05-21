@@ -197,10 +197,10 @@ public class BacklogService implements BacklogBehavior {
 			}
 			final var anken = bd.getAnkenNo();
 			final var cusTarget = resolveTarget(bd);
-			if (!cusTarget.equals(CustomerTarget.NONE) || !StringUtils.equals("03010776", pjCdJp)) {
-				continue;
-			}
-
+			// for test
+//			if (!cusTarget.equals(CustomerTarget.NONE) || !StringUtils.equals("03010776", pjCdJp)) {
+//				continue;
+//			}
 			final Pair<CustomerTarget, String> projectKey = Pair.of(cusTarget, pjCdJp);
 			List<PjjyujiDetail> pdList = new ArrayList<>();
 			List<BacklogDetail> bdList = new ArrayList<>();

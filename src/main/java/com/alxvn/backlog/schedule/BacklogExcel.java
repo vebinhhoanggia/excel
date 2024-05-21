@@ -640,6 +640,16 @@ public class BacklogExcel implements GenSchedule {
 			final var isExists = StringUtils.isNotBlank(curBacklogParentKey)
 					&& groupedBacklogs.containsKey(curBacklogParentKey);
 
+			if (!isSingleRecord && !isExists) {
+				// Skip record dang ton tai nhung khong co thong tin update
+				// Lấy phạm vi của MergeCell
+				final var firstRowIdx = mergeCellRange.getFirstRow();
+				final var lastRowIdx = mergeCellRange.getLastRow();
+				final var increCnt = lastRowIdx - firstRowIdx;
+				i.addAndGet(increCnt);
+				indexNo.incrementAndGet();
+				continue;
+			}
 			var numberOfRowsToShift = 0;
 			// T/h tồn tại thực hiện cập nhật thông tin, thêm dòng mới, merge cell lại
 			if (isExists) {
@@ -858,6 +868,7 @@ public class BacklogExcel implements GenSchedule {
 				if (totalRow != 1) {
 					final var fRow = curIdx;
 					final var lRow = fRow + numberOfRowsToShift - 1;
+
 					// merge cell
 					// Column No
 					var newMergedRegion = new CellRangeAddress(fRow, lRow, columnAIndex, columnAIndex);
@@ -886,7 +897,6 @@ public class BacklogExcel implements GenSchedule {
 			// remove sau khi lay ra thong tin xu ly
 			groupedBacklogs.remove(curBacklogParentKey);
 			indexNo.incrementAndGet();
-
 		}
 
 		evaluate(workbook, sheet);
@@ -1070,7 +1080,7 @@ public class BacklogExcel implements GenSchedule {
 
 	public void createSchedule(final CustomerTarget projecType, final String projectCd, final List<PjjyujiDetail> pds,
 			final List<BacklogDetail> bds) throws IOException {
-		log.debug("Bat dau tao schedule: {}", projectCd);
+		log.debug("Bat dau tao schedule: {} - {}", projecType, projectCd);
 
 		final var projectSchPath = createFolderStoreSchedule(projecType, projectCd);
 

@@ -23,7 +23,7 @@ import { Audio } from 'react-loader-spinner';
 const FormItem = Form.Item;
 // Create an Axios instance with the base URL
 const api = axios.create({
-	baseURL: "/api/v1", // Set the base URL to match the configured base path in Spring
+	baseURL: "/backlogApp/api/v1", // Set the base URL to match the configured base path in Spring
 });
 
 // tag::app[]
