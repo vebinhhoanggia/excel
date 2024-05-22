@@ -13,6 +13,10 @@ import org.apache.commons.lang3.StringUtils;
  */
 public class Helper {
 
+	private Helper() {
+		throw new IllegalStateException("Utility class");
+	}
+
 	public static String getAnkenNo(final String content) {
 		// use for redmine #xxxx
 		final var redminePattern = "#\\d+";

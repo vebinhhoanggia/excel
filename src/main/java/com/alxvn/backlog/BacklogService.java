@@ -36,8 +36,6 @@ import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
-import javax.servlet.http.HttpServletResponse;
-
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -50,7 +48,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StreamUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.alxvn.backlog.behavior.BacklogBehavior;
@@ -144,7 +141,7 @@ public class BacklogService implements BacklogBehavior {
 	};
 
 	private String cleanRootFolderSchedule() throws IOException {
-		final var folderPath = BacklogExcel.pathRootFolder; // Specify the desired folder path
+		final var folderPath = BacklogExcel.getPathRootFolder(); // Specify the desired folder path
 
 		final var folder = Path.of(folderPath);
 		if (Files.exists(folder)) {
@@ -161,10 +158,8 @@ public class BacklogService implements BacklogBehavior {
 					return FileVisitResult.CONTINUE;
 				}
 			});
-			System.out.println("All files and directories within the folder have been deleted.");
 		} else {
 			Files.createDirectories(folder);
-			System.out.println("New folder created: " + folder);
 		}
 		return folderPath;
 	}
@@ -173,7 +168,6 @@ public class BacklogService implements BacklogBehavior {
 	private String genSchedule(final List<PjjyujiDetail> pds, final List<BacklogDetail> bis) throws IOException {
 		log.debug("Xử lý tạo file schedule !!!");
 		log.debug("Bắt đầu xử lý.");
-		final List<PjjyujiDetail> pdsOrg = new ArrayList<>(pds);
 		final var projectMap = getMapProject(pds, bis);
 
 		final var util = new BacklogExcel();
@@ -191,7 +185,7 @@ public class BacklogService implements BacklogBehavior {
 			 */
 			final var projecType = key.getKey();
 			final var projectCd = key.getValue();
-//			final var workingReports = val.getKey();
+			final var workingReports = val.getKey();
 			final var backlogs = CollectionUtils.emptyIfNull(val.getValue()).stream().sorted(comparator)
 					.collect(Collectors.toList());
 
@@ -199,42 +193,24 @@ public class BacklogService implements BacklogBehavior {
 			 * Điền thông tin backlog và working report vào file schedule mới
 			 */
 			if (StringUtils.isBlank(projectCd)) {
-				log.debug("Schedule.wr.isNotValid: {}", pdsOrg);
+				log.debug("Schedule.wr.isNotValid: {}", workingReports);
 				log.debug("Schedule.bl.isNotValid: {}", backlogs);
 			}
-			util.createSchedule(projecType, projectCd, pdsOrg, backlogs);
+			util.createSchedule(projecType, projectCd, workingReports, backlogs);
 		}
 		log.debug("Kết thúc xử lý tạo file schedule !!!");
 		if (util.isExportZip()) {
-			return util.pathRootFolder;
+			return util.getPathRootFolder();
 		}
 		return StringUtils.EMPTY;
-	}
-
-	public void generateZipFile(final HttpServletResponse response, final String folderPath) {
-		if (StringUtils.isBlank(folderPath)) {
-			return;
-		}
-		response.setContentType("application/octet-stream");
-		response.setHeader("Content-Disposition", "attachment;filename=download.zip");
-		response.setStatus(HttpServletResponse.SC_OK);
-
-		response.setContentType("application/octet-stream");
-		response.setHeader("Content-Disposition", "attachment;filename=download.zip");
-		response.setStatus(HttpServletResponse.SC_OK);
-
-		try (var zippedOut = new ZipOutputStream(response.getOutputStream())) {
-			addFilesToZip(zippedOut, Paths.get(folderPath));
-			zippedOut.finish();
-		} catch (final IOException e) {
-			// Handle exceptions here
-		}
 	}
 
 	public static void zipFolderByPath(final String folderPath, final String outputZipFile) {
 		try {
 			final List<Path> filesToZip = new ArrayList<>();
-			Files.walk(Paths.get(folderPath)).filter(Files::isRegularFile).forEach(filesToZip::add);
+			try (var stream = Files.walk(Paths.get(folderPath))) {
+				stream.filter(Files::isRegularFile).forEach(filesToZip::add);
+			}
 
 			try (var zipOutputStream = new ZipOutputStream(new FileOutputStream(outputZipFile))) {
 				for (final Path filePath : filesToZip) {
@@ -309,63 +285,17 @@ public class BacklogService implements BacklogBehavior {
 		}
 	}
 
-	public ResponseEntity<InputStreamResource> generateZipFile(final String folderPath) {
-		if (StringUtils.isBlank(folderPath)) {
-			return ResponseEntity.noContent().build();
-		}
-		final var outputZipFile = folderPath + "/folder.zip";
-		zipFolderByPath(folderPath, outputZipFile);
-
-		return ResponseEntity.noContent().build();
-//		try (var byteArrayOutputStream = new ByteArrayOutputStream();
-//				var zipOutputStream = new ZipOutputStream(byteArrayOutputStream)) {
-//			addFilesToZip(zipOutputStream, Paths.get(folderPath));
-//
-//			final var zipBytes = byteArrayOutputStream.toByteArray();
-//			final var zipInputStream = new ByteArrayInputStream(zipBytes);
-//			final var resource = new InputStreamResource(zipInputStream);
-//
-//			final var headers = new HttpHeaders();
-//			headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-//			headers.setContentDisposition(ContentDisposition.builder("attachment").filename("download.zip").build());
-//
-//			return new ResponseEntity<>(resource, headers, HttpStatus.OK);
-//		} catch (final IOException e) {
-//			// Handle exceptions here
-//			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-//		}
-	}
-
-	private void addFilesToZip(final ZipOutputStream zipOutputStream, final Path basePath) {
-		try (var stream = Files.walk(basePath)) {
-			stream.filter(Files::isRegularFile).forEach(file -> {
-				try (var inputStream = Files.newInputStream(file)) {
-					final var zipEntry = new ZipEntry(basePath.relativize(file).toString());
-					zipOutputStream.putNextEntry(zipEntry);
-					StreamUtils.copy(inputStream, zipOutputStream);
-					zipOutputStream.closeEntry();
-				} catch (final IOException e) {
-					// Handle any exceptions that may occur during file addition
-				}
-			});
-		} catch (final IOException e) {
-			// Handle any exceptions that may occur during the file walk
-		}
-	}
-
 	private Map<Pair<CustomerTarget, String>, Pair<List<PjjyujiDetail>, List<BacklogDetail>>> getMapProject(
 			final List<PjjyujiDetail> pds, final List<BacklogDetail> bis) {
 //		<PJCD, PJCDJP>,
 		final Map<Pair<CustomerTarget, String>, Pair<List<PjjyujiDetail>, List<BacklogDetail>>> result = new HashMap<>();
 		for (final BacklogDetail bd : bis) {
 			final var pjCdJp = bd.getPjCdJp();
-			if (StringUtils.isBlank(pjCdJp)) {
-//				continue;
-			}
-			final var anken = bd.getAnkenNo();
 			final var cusTarget = resolveTarget(bd);
 			// for test
-//			if (!cusTarget.equals(CustomerTarget.NONE) || !StringUtils.equals("03010776", pjCdJp)) {
+//			if (!cusTarget.equals(CustomerTarget.NONE) || !StringUtils.equals("05000189", pjCdJp)) {
+//				// 05000189
+//				// 03010776
 //				continue;
 //			}
 			final Pair<CustomerTarget, String> projectKey = Pair.of(cusTarget, pjCdJp);
@@ -380,8 +310,8 @@ public class BacklogService implements BacklogBehavior {
 			final var iterator = pds.iterator();
 			while (iterator.hasNext()) {
 				final var item = iterator.next();
-				final var ankenNo = item.getAnkenNo();
-				if (StringUtils.equals(anken, ankenNo)) {
+				final var wrProjectCdJp = item.getPjCdJp();
+				if (StringUtils.equals(pjCdJp, wrProjectCdJp)) {
 					pdList.add(item);
 					iterator.remove(); // remove sau khi thỏa điều kiện
 				}
@@ -392,6 +322,7 @@ public class BacklogService implements BacklogBehavior {
 			}
 			result.put(projectKey, Pair.of(pdList, bdList));
 		}
+
 		// Create a TreeMap to store the sorted map
 		final Map<Pair<CustomerTarget, String>, Pair<List<PjjyujiDetail>, List<BacklogDetail>>> sortedResult = new TreeMap<>(
 				(pair1, pair2) -> {
@@ -622,6 +553,63 @@ public class BacklogService implements BacklogBehavior {
 			"課題発生第三者"//
 	};
 
+	private BacklogDetail getRecord(final Map<String, String> columnValues) throws IncorrectFullNameException {
+		final var status = columnValues.get("Status");
+		final var backlogKey = columnValues.get("Key");
+		final var issueType = columnValues.get("Issue Type");
+		final var category = columnValues.get("Category Name");
+		final var subject = columnValues.get("Subject");
+		// Priority
+		final var milestone = columnValues.get("Milestone");
+		final var assignee = columnValues.get("Assignee");
+		final var parentKey = columnValues.get("Parent issue key");
+		final var actualStartDate = parseBacklogDate(columnValues.get("Start Date"));
+		final var actualDueDate = parseBacklogDate(columnValues.get("Due date"));
+		final var estimatedHours = columnValues.get("Estimated Hours");
+		final var actualHours = columnValues.get("Actual Hours");
+		final var targetCustomer = columnValues.get("顧客");
+		final var targetTaskId = columnValues.get("課題");
+		final var expectedStartDate = parseBacklogCustomDate(columnValues.get("開始予定日"));
+		final var expectedDueDate = parseBacklogCustomDate(columnValues.get("完了予定日"));
+		final var progress = extractProcess(columnValues.get("進捗"));
+		final var expectedDeliveryDate = parseBacklogCustomDate(columnValues.get("納品予定日"));
+		final var processOfWr = columnValues.get("process(Of Wk Report)");
+		// 関連する課題(親)
+		final var bugCategory = columnValues.get("課題カテゴリ");
+		final var bugOrigin = columnValues.get("課題発生元");
+		final var bugCreator = columnValues.get("課題発生者");
+		final var bug3rdTest = columnValues.get("課題発生第三者");
+
+		final var ankenNo = StringUtils.defaultIfBlank(targetTaskId, Helper.getAnkenNo(subject));
+		return new BacklogDetail.Builder().key(backlogKey) //
+				.issueType(issueType) //
+				.ankenNo(ankenNo) //
+				.mailId(WorkingReportHelper.getMailIdFromFullName(assignee)) //
+				.pjCdJp(extractPjCdFromMileStone(milestone, subject)) //
+				.category(category) //
+				.subject(subject) //
+				.milestone(milestone) //
+				.assignee(assignee) //
+				.parentKey(parentKey) //
+				.expectedStartDate(expectedStartDate) //
+				.expectedDueDate(expectedDueDate) //
+				.expectedDeliveryDate(expectedDeliveryDate) //
+				.estimatedHours(StringUtils.isNotBlank(estimatedHours) ? new BigDecimal(estimatedHours) : null) //
+				.actualStartDate(actualStartDate) //
+				.actualDueDate(actualDueDate) //
+				.actualHours(StringUtils.isNotBlank(actualHours) ? new BigDecimal(actualHours) : null) //
+				.status(status) //
+				.targetCustomer(targetCustomer) //
+				.progress(progress) //
+				.bugCategory(bugCategory) //
+				.bugOrigin(bugOrigin) //
+				.bugCreator(bugCreator) //
+				.bug3rdTest(bug3rdTest) //
+				.processOfWr(processOfWr)
+				/**/
+				.build();
+	}
+
 	private List<BacklogDetail> parseBacklogDetail(final CSVReader csvReader)
 			throws IOException, CsvException, IncorrectFullNameException {
 		final List<BacklogDetail> result = new ArrayList<>();
@@ -650,69 +638,7 @@ public class BacklogService implements BacklogBehavior {
 					final var val = entry.getValue();
 					columnValues.put(key, row[val]);
 				}
-				// Store the values of the desired columns in a map
-//				for (var i = 0; i < columnIndices.length; i++) {
-//					if (columnIndices[i] != null) {
-//						columnValues.put(backlogColumns[i], row[columnIndices[i]]);
-//					}
-//				}
-
-				// Access the values by column name
-				final var status = columnValues.get("Status");
-				final var backlogKey = columnValues.get("Key");
-				final var issueType = columnValues.get("Issue Type");
-				final var category = columnValues.get("Category Name");
-				final var subject = columnValues.get("Subject");
-//							final String columnPriorityValue = columnValues.get("Priority");
-				final var milestone = columnValues.get("Milestone");
-				final var assignee = columnValues.get("Assignee");
-				final var parentKey = columnValues.get("Parent issue key");
-				final var actualStartDate = parseBacklogDate(columnValues.get("Start Date"));
-				final var actualDueDate = parseBacklogDate(columnValues.get("Due date"));
-				final var estimatedHours = columnValues.get("Estimated Hours");
-				final var actualHours = columnValues.get("Actual Hours");
-				final var targetCustomer = columnValues.get("顧客");
-				final var targetTaskId = columnValues.get("課題");
-				final var expectedStartDate = parseBacklogCustomDate(columnValues.get("開始予定日"));
-				final var expectedDueDate = parseBacklogCustomDate(columnValues.get("完了予定日"));
-				final var progress = extractProcess(columnValues.get("進捗"));
-				final var expectedDeliveryDate = parseBacklogCustomDate(columnValues.get("納品予定日"));
-				final var processOfWr = columnValues.get("process(Of Wk Report)");
-//							final String column関連する課題Value = columnValues.get("関連する課題(親)");
-				final var bugCategory = columnValues.get("課題カテゴリ");
-				final var bugOrigin = columnValues.get("課題発生元");
-				final var bugCreator = columnValues.get("課題発生者");
-				final var bug3rdTest = columnValues.get("課題発生第三者");
-
-				final var ankenNo = StringUtils.defaultIfBlank(targetTaskId, Helper.getAnkenNo(subject));
-				final var detail = new BacklogDetail.Builder().key(backlogKey) //
-						.issueType(issueType) //
-						.ankenNo(ankenNo) //
-						.mailId(WorkingReportHelper.getMailIdFromFullName(assignee)) //
-						.pjCdJp(extractPjCdFromMileStone(milestone, subject)) //
-						.category(category) //
-						.subject(subject) //
-						.milestone(milestone) //
-						.assignee(assignee) //
-						.parentKey(parentKey) //
-						.expectedStartDate(expectedStartDate) //
-						.expectedDueDate(expectedDueDate) //
-						.expectedDeliveryDate(expectedDeliveryDate) //
-						.estimatedHours(StringUtils.isNotBlank(estimatedHours) ? new BigDecimal(estimatedHours) : null) //
-						.actualStartDate(actualStartDate) //
-						.actualDueDate(actualDueDate) //
-						.actualHours(StringUtils.isNotBlank(actualHours) ? new BigDecimal(actualHours) : null) //
-						.status(status) //
-						.targetCustomer(targetCustomer) //
-						.progress(progress) //
-						.bugCategory(bugCategory) //
-						.bugOrigin(bugOrigin) //
-						.bugCreator(bugCreator) //
-						.bug3rdTest(bug3rdTest) //
-						.processOfWr(processOfWr)
-						/**/
-						.build();
-				result.add(detail);
+				result.add(getRecord(columnValues));
 			}
 		}
 		return result;

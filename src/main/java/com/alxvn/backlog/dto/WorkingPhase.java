@@ -25,21 +25,21 @@ public enum WorkingPhase implements EnumCodeable {
 	, ID42("42", "No Class") //
 	, ID43("43", "Bug") // Bug
 	, ID44("44", "Translate") //
-	, ID45("45", "Spec change") //
-	, ID46("46", "Tech Research") //
-	, ID47("47", "Estimate Hour") //
+	, ID45("45", "Spec") //
+	, ID46("46", "Research") //
+	, ID47("47", "Estimate") //
 	, ID48("48", "Review") //
 	, ID49("49", "Test") //
 	, ID50("50", "Progress management") //
 	, ID51("51", "Progress report") //
 	, ID52("52", "Internal meeting") //
 	, ID53("53", "Meeting with customer") //
-	, ID54("54", "Setup environment") // Setup environment
+	, ID54("54", "Environment") // Setup environment
 	, ID55("55", "Problem report") //
 	, ID56("56", "Learning") //
 	, ID57("57", "Internal member support") //
 	, ID58("58", "Outsource support") //
-	, ID0("0", "Not expected") //
+	, ID0("0", "NaN") //
 
 	/* */
 	;

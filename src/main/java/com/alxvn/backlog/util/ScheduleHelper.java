@@ -313,12 +313,6 @@ public class ScheduleHelper {
 				continue;
 			}
 
-			// TODO: using DataFormatter
-//			final DataFormatter dataFormatter = new DataFormatter();
-//			final String cellValue = dataFormatter.formatCellValue(c, evaluator);
-//			final LocalDate date = LocalDate.parse(cellValue, FORMATTER_YYYYMMDD);
-//			final YearMonth yearMonth = YearMonth.from(date);
-
 			try {
 				final var yearMonth = YearMonth
 						.from(LocalDate.parse(getCellValueAsString(c, evaluator.evaluate(c)), FORMATTER_YYYYMMDD));
