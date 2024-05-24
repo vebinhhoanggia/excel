@@ -10,11 +10,11 @@
 		<relativePath /> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.alxvn</groupId>
-	<artifactId>backlog</artifactId>
+	<artifactId>excel</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<packaging>war</packaging>
-	<name>backlog</name>
-	<description>Check Backlog project for Spring Boot</description>
+	<name>excel</name>
+	<description>Excel Operation</description>
 	<properties>
 		<java.version>21</java.version>
 		<commons.io.version>2.15.0</commons.io.version>

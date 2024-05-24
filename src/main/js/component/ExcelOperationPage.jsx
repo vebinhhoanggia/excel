@@ -1,29 +1,19 @@
-"use strict";
-
-// tag::vars[]
-import React from 'react';
-import ExcelOperationPage from './component/ExcelOperationPage';
-
-const ReactDOM = require("react-dom"); // <2>
-const client = require("./client"); // <3>
+import React from "react";
+import PropTypes from "prop-types";
 import {
-	Form,
-	Button,
-	message,
-	notification,
-	Divider,
-	Row,
-	Col,
-	Upload,
-	Modal,
+	Form, Button, message, notification, Divider,
+	Row, Col, Upload
 } from "antd";
-import { UploadOutlined } from "@ant-design/icons";
+import { UploadOutlined } from '@ant-design/icons';
 import axios from "axios";
-import { Audio } from 'react-loader-spinner';
-// end::vars[]
+import { PulseLoader } from "halogenium";
+import _ from 'lodash';
+
+import { conf } from "../config/conf";
+import authHeader from '../auth/auth-common';
 
 const FormItem = Form.Item;
-// Create an Axios instance with the base URL
+
 let apiContextPath = '';
 if (process.env.NODE_ENV === 'production') {
 	console.log('Running in production mode');
@@ -39,81 +29,46 @@ const api = axios.create({
 	baseURL: `${apiContextPath ? '/' + apiContextPath : ''}/api/v1`, // Set the base URL to match the configured base path in Spring
 });
 
-// tag::app[]
-class App extends React.Component {
-	// <1>
+class ExcelOperationPage extends React.Component {
+	formRef = React.createRef();
+	static get propTypes() {
+		return {
+			form: PropTypes.object,
+		};
+	}
+
 	constructor(props) {
 		super(props);
-		this.state = {};
+
+		this.handleSubmit = this.handleSubmit.bind(this);
+
+		this.state = {
+			isLoading: false,
+		};
 	}
 
 	componentDidMount() {
-		// <2>
-		/*client({method: 'GET', path: '/api/employees'}).done(response => {
-				this.setState({employees: response.entity._embedded.employees});
-			});*/
+		document.title = 'HELLO';
 	}
 
-	render() {
-		// <3>
-
-		return (
-			<ExcelOperationPage />
-		);
-	}
-}
-// end::app[]
-
-// tag::GenSchedule[]
-class GenSchedule extends React.Component {
-	// <1>
-	formRef = React.createRef();
-	constructor(props) {
-		super(props);
-		this.handleSubmit = this.handleSubmit.bind(this);
-		this.state = { file1List: [], file2List: [] };
-	}
-
-	modal = null;
-
-	onFinish = (values) => { };
-
-	openModalInfo = (config) => {
-		Modal.info(config);
+	onFinish = (values) => {
 	};
 
 	handleSubmit(e) {
 		this.formRef.current.validateFields().then((fieldsValue) => {
-			// Should format date value before submit.
-			const url = '/base/genSchedule';
+			// const url = `${conf.operation.excel.split}`;
+			const url = '/opeation/excel/upload-excel';
 
-			const {
-				file1List: file1,
-				file2List: file2,
-			} = this.state;
+			const { file1List: file1 } = this.state;
 			const formData = new FormData();
 
-			let file1Val = null;
-			if (file1 && file1.length) {
-				for (let i = 0; i < file1.length; i++) {
-					if (file1[i]) {
-						file1Val = file1[i];
-						break;
-					}
+			for (let i = 0; i < file1.length; i++) {
+				if (file1[i]) {
+					formData.append('files', file1[i]);
+					// formData.append('files', file1[i], encodeURIComponent(file1[i].name));
 				}
 			}
-			formData.append("file1", file1Val);
 
-			let file2Val = null;
-			if (file2 && file2.length) {
-				for (let i = 0; i < file2.length; i++) {
-					if (file2[i]) {
-						file2Val = file2[i];
-						break;
-					}
-				}
-			}
-			formData.append("file2", file2Val);
 
 			this.setState(
 				{
@@ -124,7 +79,7 @@ class GenSchedule extends React.Component {
 			api
 				.post(url, formData, {
 					headers: {
-						"Content-Type": "multipart/form-data",
+						'Content-Type': 'multipart/form-data',
 					},
 					responseType: 'blob'
 				})
@@ -192,66 +147,24 @@ class GenSchedule extends React.Component {
 		this.setState({ [fieldName]: newFileList });
 	}
 
-	extractFileName(contentDispositionValue) {
-		var filename = "";
-		if (
-			contentDispositionValue &&
-			contentDispositionValue.indexOf("attachment") !== -1
-		) {
-			var filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
-			var matches = filenameRegex.exec(contentDispositionValue);
-			if (matches != null && matches[1]) {
-				filename = matches[1].replace(/['"]/g, "");
-			}
-		}
-		return filename;
-	}
-
 	render() {
-		// <3>
-		const { file1List, file2List, isLoading } = this.state;
+		const { file1List, isLoading } = this.state;
 		const className = isLoading ? "loading" : "";
 		const overlay = isLoading ? "overlay" : "";
 		const defaultProps = {
-			maxCount: 1,
+			// maxCount: 1,
+			multiple: true,
 		};
 		const upload1Props = {
 			...defaultProps,
 			onRemove: (f) => this.handleRemove(1, f),
 			beforeUpload: (file) => {
-				const pattern = /^pjjyuji_data_csv_\d{8}\.csv$/;
-
-				if (!pattern.test(file.name)) {
-					message.error(
-						'Invalid file name pattern. Please use "pjjyuji_data_csv_yyyymmdd.csv" format.'
-					);
-					return Upload.LIST_IGNORE;
-				}
 				this.setState((prevState) => ({
-					file1List: [file],
+					file1List: [...prevState.file1List, file],
 				}));
 				return false;
 			},
 			file1List,
-		};
-		const upload2Props = {
-			...defaultProps,
-			onRemove: (f) => this.handleRemove(2, f),
-			beforeUpload: (file) => {
-				const pattern = /^Backlog-Issues-\d{8}-\d{4}\.csv$/;
-
-				if (!pattern.test(file.name)) {
-					message.error(
-						'Invalid file name pattern. Please use "Backlog-Issues-yyyymmdd-0000.csv" format.'
-					);
-					return Upload.LIST_IGNORE;
-				}
-				this.setState((prevState) => ({
-					file2List: [file],
-				}));
-				return false;
-			},
-			file2List,
 		};
 
 		return (
@@ -282,35 +195,28 @@ class GenSchedule extends React.Component {
 					}
 					return "";
 				})()}
-				<h1>GENERATE BACKLOG SCHEDULE</h1>
+				<h1>Tach file excel</h1>
 				<Form
 					layout="horizontal"
-					initialValues={{}}
+					initialValues={{
+					}}
 					ref={this.formRef}
 					name="control-ref"
 					onFinish={this.onFinish}
 					labelCol={{ span: 8 }}
 					wrapperCol={{ span: 16 }}
-					className="qms-form"
+					className='qms-form'
 				>
+					<FormItem wrapperCol={{ span: 24 }}>
+						<div className="export-title">Ố LA LA</div>
+					</FormItem>
 					<Form.Item
 						name="file1"
-						label="Pjjyuji"
+						label="INPUT"
 						valuePropName="file1List"
 						getValueFromEvent={(e) => e.file1List}
 					>
 						<Upload {...upload1Props}>
-							<Button icon={<UploadOutlined />}>Select Files</Button>
-						</Upload>
-					</Form.Item>
-
-					<Form.Item
-						name="file2"
-						label="Issues"
-						valuePropName="file2List"
-						getValueFromEvent={(e) => e.file2List}
-					>
-						<Upload {...upload2Props}>
 							<Button icon={<UploadOutlined />}>Select Files</Button>
 						</Upload>
 					</Form.Item>
@@ -330,22 +236,9 @@ class GenSchedule extends React.Component {
 									onClick={this.handleSubmit}
 									size="large"
 								>
-									generate
+									SplitFile
 								</Button>
 							</FormItem>
-						</Col>
-						<Col span={9}>
-							<div className="form-explanation">
-								<h3>Chú thích</h3>
-								<ul>
-									<li>
-										<strong>Pjjyuji:</strong> File thông tin working report. Được export từ http://192.168.10.89/pjjyujidatacsv.
-									</li>
-									<li>
-										<strong>Issues:</strong> File thông tin schedule backlog. Được export theo định dạng csv.
-									</li>
-								</ul>
-							</div>
 						</Col>
 					</Row>
 				</Form>
@@ -354,10 +247,5 @@ class GenSchedule extends React.Component {
 		);
 	}
 }
-// end::GenSchedule[]
 
-// tag::employee-list[]
-
-// tag::render[]
-ReactDOM.render(<App />, document.getElementById("react"));
-// end::render[]
+export default ExcelOperationPage;
