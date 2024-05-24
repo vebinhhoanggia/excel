@@ -8,6 +8,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -77,19 +78,24 @@ public class ExcelOperationService {
 	}
 
 	public String getFileName(MultipartFile file) {
-		final String originalFileName = file.getOriginalFilename();
+	    final String originalFileName = file.getOriginalFilename();
 
-		if (org.springframework.util.StringUtils.hasText(originalFileName)) {
-			try {
-				// Decode file name using UTF-8 encoding
-				return new String(originalFileName.getBytes(StandardCharsets.ISO_8859_1), StandardCharsets.UTF_8);
-			} catch (final Exception e) {
-				// Handle the exception or return the original file name
-				e.printStackTrace();
-			}
-		}
+//	    if (org.springframework.util.StringUtils.hasText(originalFileName)) {
+//	        try {
+//	            // Check if the filename is already in ShiftJIS encoding
+//	            String testString = new String(originalFileName.getBytes(StandardCharsets.ISO_8859_1), StandardCharsets.ISO_8859_1);
+//	            return originalFileName;
+//	        } catch (UnsupportedEncodingException e) {
+//	            // Decode file name using UTF-8 encoding
+//	            return new String(originalFileName.getBytes(StandardCharsets.ISO_8859_1), StandardCharsets.UTF_8);
+//	        } catch (Exception e) {
+//	            // Handle the exception or return the original file name
+//	            e.printStackTrace();
+//	        }
+//	    }
 
-		return originalFileName;
+	    return originalFileName;
+
 	}
 
 	private void trunkFld(Path folder) throws IOException {
