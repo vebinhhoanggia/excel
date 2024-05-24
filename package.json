@@ -1,7 +1,7 @@
 {
-  "name": "backlog",
+  "name": "excel",
   "version": "0.1.0",
-  "description": "Backlog Sample Pet Project",
+  "description": "Excel Sample Pet Project",
   "repository": {
     "type": "git",
     "url": ""

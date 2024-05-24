@@ -7,6 +7,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -20,6 +21,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -90,8 +92,24 @@ public class ExcelOperationService {
 		return originalFileName;
 	}
 
-	public ResponseEntity<Object> uploadAndSplitExcelFiles(@RequestParam("files") List<MultipartFile> files,
-			double perSheetInFile) throws IOException {
+	private void trunkFld(Path folder) throws IOException {
+		Files.walkFileTree(folder, new SimpleFileVisitor<Path>() {
+			@Override
+			public FileVisitResult visitFile(final Path file, final BasicFileAttributes attrs) throws IOException {
+				Files.delete(file);
+				return FileVisitResult.CONTINUE;
+			}
+
+			@Override
+			public FileVisitResult postVisitDirectory(final Path dir, final IOException exc) throws IOException {
+				Files.delete(dir);
+				return FileVisitResult.CONTINUE;
+			}
+		});
+		System.out.println("All files and directories within the folder have been deleted.");
+	}
+	public ResponseEntity<InputStreamResource> uploadAndSplitExcelFiles(
+			@RequestParam("files") List<MultipartFile> files, double perSheetInFile) throws IOException {
 		System.out.println("Bắt đầu xử lý");
 		log.debug("Bắt đầu xử lý");
 		final String pathStr = "D:\\Doc\\split\\result";
@@ -100,20 +118,7 @@ public class ExcelOperationService {
 		final Path folder = Paths.get(pathStr);
 
 		if (Files.exists(folder)) {
-			Files.walkFileTree(folder, new SimpleFileVisitor<Path>() {
-				@Override
-				public FileVisitResult visitFile(final Path file, final BasicFileAttributes attrs) throws IOException {
-					Files.delete(file);
-					return FileVisitResult.CONTINUE;
-				}
-
-				@Override
-				public FileVisitResult postVisitDirectory(final Path dir, final IOException exc) throws IOException {
-					Files.delete(dir);
-					return FileVisitResult.CONTINUE;
-				}
-			});
-			System.out.println("All files and directories within the folder have been deleted.");
+			trunkFld(folder);
 		} else {
 			Files.createDirectories(folder);
 			System.out.println("New folder created: " + folder);
@@ -168,6 +173,9 @@ public class ExcelOperationService {
 							final String sheetName = sheet.getSheetName();
 							if (!StringUtils.equals(sheetName, "変更履歴")) {
 								final Row rCharChkId = sheet.getRow(rowChkIdx);
+								if (rCharChkId == null) {
+									break;
+								}
 								final Row rCheckOrdId = sheet.getRow(rowChkIdx + 1);
 								for (int column = columnSIndex; column <= rCharChkId.getLastCellNum(); column++) {
 									final Cell charCell = rCharChkId.getCell(column); // Get the source cell
@@ -192,7 +200,9 @@ public class ExcelOperationService {
 						try (FileOutputStream outputStream = new FileOutputStream(splitFile, false)) {
 							workbook.write(outputStream);
 						}
-
+						if (curChkIdList.isEmpty()) {
+							break;
+						}
 						final Pair<String, Double> start = curChkIdList.get(0);
 						final String startString = start.getKey() + String.format("%03d", start.getValue().intValue());
 						final Pair<String, Double> end = curChkIdList.get(curChkIdList.size() - 1);
@@ -220,22 +230,32 @@ public class ExcelOperationService {
 					}
 				}
 			}
+			String rsFileName = "KetQuaChay.txt";
+			  // Construct the file path
+            Path filePath = Paths.get(pathStr, rsFileName);
 
-			// Create a ZIP file containing the split files
+            // Write the content to the file
+            try (PrintWriter writer = new PrintWriter(Files.newBufferedWriter(filePath))) {
+                writer.write(StringUtils.defaultIfBlank(errors.stream().collect(Collectors.joining(", ")), "NO ERROR!"));
+            }
+            System.out.println("File created: " + filePath.toString());
+            
 			System.out.println("Kết thúc xử lý");
 			log.debug("Kết thúc xử lý");
-			
+
+			// Create a ZIP file containing the split files
 			FileUtil util = new FileUtil();
-			return util.zipFolder(pathStr, "");
+			return util.zipFolder(pathStr);
 		} catch (final Exception e) {
 			System.out.println("Xử lý lỗi");
 			log.debug("Xử lý lỗi");
 			e.printStackTrace();
 			// Handle the exception appropriately
 			return ResponseEntity.badRequest().build();
+		} finally {
+			trunkFld(folder);
 		}
 	}
-	
 
 	private static int compareExcelColumnStrings(String str1, String str2) {
 		final int len1 = str1.length();

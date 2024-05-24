@@ -1,9 +1,9 @@
-# backlog
+# Excel
 
 # Cấu hình môi trường phát triển:
 	## JDK: 21(jdk-21.0.2) 64b
 	## Eclipse: Version: 2023-12 (4.30.0)
-	## Repo: https://github.com/vebinhhoanggia/backlog
+	## Repo: https://github.com/vebinhhoanggia/excel
 
 # Cấu hình tomcat 10.1.18
 	## Thiết lập JAVA_HOME
@@ -11,14 +11,9 @@
 		File: bin>service.bat
 
 	## Setup service
-		bin>service.bat install backlog
+		bin>service.bat install
 
 # Deploy
-	## Config port:
-		File: application.properties
-			=> spring.profiles.active=prod
-		File: application-prod.properties
-			=> server.port=8181 // Chọn port khớp vói tomcat
 	## Build war:
 		Thực hiện deploy war.
 	## Copy file war vào webapps

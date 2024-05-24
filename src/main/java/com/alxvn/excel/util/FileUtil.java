@@ -31,6 +31,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
+import com.alxvn.excel.dto.DownloadResponse;
 import com.alxvn.excel.dto.ResponseDto;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -81,7 +82,7 @@ public class FileUtil {
 		return lastFolderName;
 	}
 
-	public  ResponseEntity<Object> zipFolder(final String folderPath, String message) {
+	public  ResponseEntity<InputStreamResource> zipFolder(final String folderPath) {
 		log.debug("Bắt đầu xử lý tạo zip file !!!");
 		if (StringUtils.isBlank(folderPath)) {
 			return ResponseEntity.noContent().build();
@@ -93,30 +94,21 @@ public class FileUtil {
 			final var resource = new InputStreamResource(inputStream);
 
 			// Construct the new file name
-//			final var fileDownloadName = getLastFolderName(folderPath) + ".zip";
+			final var fileDownloadName = getLastFolderName(folderPath) + ".zip";
 
 //			final var headers = new HttpHeaders();
 //			headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
 //			headers.setContentDisposition(ContentDisposition.builder("attachment").filename(fileDownloadName).build());
-			
-			// Prepare the response object
-			ResponseDto responseDTO = new ResponseDto(resource, message);
 
-			// Convert the response object to JSON
-			String jsonResponse;
-			try {
-				jsonResponse = objectMapper.writeValueAsString(responseDTO);
-			} catch (Exception e) {
-				// Handle the exception
-				return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-			}
+			String contentType = "application/zip";
 
-			// Create the ResponseEntity
-			HttpHeaders headers = new HttpHeaders();
-			headers.setContentType(MediaType.APPLICATION_JSON);
-			return new ResponseEntity<>(jsonResponse, headers, HttpStatus.OK);
+			// Create the DownloadResponse object
+			DownloadResponse downloadResponse = new DownloadResponse(resource, fileDownloadName, contentType, null);
 
-//			log.debug("Kết thúc xử lý zip file !!!");
+			log.debug("Kết thúc xử lý zip file !!!");
+			// Return the response with the appropriate headers
+			return ResponseEntity.ok().headers(downloadResponse.getHttpHeaders()).body(downloadResponse.getFile());
+
 //			return new ResponseEntity<>(resource, headers, HttpStatus.OK);
 		} catch (final IOException e) {
 			// Handle exceptions here

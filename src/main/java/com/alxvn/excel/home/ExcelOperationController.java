@@ -41,7 +41,7 @@ public class ExcelOperationController {
 	}
 
 	@PostMapping("/upload-excel")
-	public ResponseEntity<Object> uploadAndSplitExcelFiles(@RequestParam("files") List<MultipartFile> files)
+	public ResponseEntity<InputStreamResource> uploadAndSplitExcelFiles(@RequestParam("files") List<MultipartFile> files)
 			throws IOException {
 		final double perSheetInFile = 10.0;
 		return excelService.uploadAndSplitExcelFiles(files, perSheetInFile);

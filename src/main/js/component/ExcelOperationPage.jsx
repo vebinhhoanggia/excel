@@ -2,15 +2,12 @@ import React from "react";
 import PropTypes from "prop-types";
 import {
 	Form, Button, message, notification, Divider,
-	Row, Col, Upload
+	Row, Col, Upload,
+	Modal,
 } from "antd";
 import { UploadOutlined } from '@ant-design/icons';
 import axios from "axios";
-import { PulseLoader } from "halogenium";
-import _ from 'lodash';
-
-import { conf } from "../config/conf";
-import authHeader from '../auth/auth-common';
+import { Audio } from 'react-loader-spinner';
 
 const FormItem = Form.Item;
 
@@ -24,10 +21,6 @@ if (process.env.NODE_ENV === 'production') {
 	console.log('API_CONTEXT value:', '');
 	apiContextPath = '';
 }
-
-const api = axios.create({
-	baseURL: `${apiContextPath ? '/' + apiContextPath : ''}/api/v1`, // Set the base URL to match the configured base path in Spring
-});
 
 class ExcelOperationPage extends React.Component {
 	formRef = React.createRef();
@@ -44,18 +37,39 @@ class ExcelOperationPage extends React.Component {
 
 		this.state = {
 			isLoading: false,
+			file1List: [],
 		};
 	}
 
 	componentDidMount() {
 		document.title = 'HELLO';
 	}
-
+	extractFileName(contentDispositionValue) {
+		var filename = "";
+		if (
+			contentDispositionValue &&
+			contentDispositionValue.indexOf("attachment") !== -1
+		) {
+			var filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+			var matches = filenameRegex.exec(contentDispositionValue);
+			if (matches != null && matches[1]) {
+				filename = matches[1].replace(/['"]/g, "");
+			}
+		}
+		return filename;
+	}
 	onFinish = (values) => {
+	};
+
+	openModalInfo = (config) => {
+		Modal.info(config);
 	};
 
 	handleSubmit(e) {
 		this.formRef.current.validateFields().then((fieldsValue) => {
+			const api = axios.create({
+				baseURL: `${apiContextPath ? '/' + apiContextPath : ''}/api/v1`, // Set the base URL to match the configured base path in Spring
+			});
 			// const url = `${conf.operation.excel.split}`;
 			const url = '/opeation/excel/upload-excel';
 
@@ -86,7 +100,7 @@ class ExcelOperationPage extends React.Component {
 				.then((response) => {
 					const config = {
 						title: 'title',
-						content: '',
+						content: 'Mở file KetQuaChay.txt đọc kết quả check', // Lấy message từ DownloadResponse,
 						okText: 'ＯＫ',
 						onOk() {
 							() => { };
@@ -158,9 +172,9 @@ class ExcelOperationPage extends React.Component {
 		const upload1Props = {
 			...defaultProps,
 			onRemove: (f) => this.handleRemove(1, f),
-			beforeUpload: (file) => {
+			beforeUpload: (file, fileList) => {
 				this.setState((prevState) => ({
-					file1List: [...prevState.file1List, file],
+					file1List: [...fileList],
 				}));
 				return false;
 			},
