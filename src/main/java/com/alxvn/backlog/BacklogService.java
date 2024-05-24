@@ -6,6 +6,7 @@ package com.alxvn.backlog;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -21,8 +22,10 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
@@ -140,8 +143,7 @@ public class BacklogService implements BacklogBehavior {
 		return 0;
 	};
 
-	private String cleanRootFolderSchedule() throws IOException {
-		final var folderPath = BacklogExcel.getPathRootFolder(); // Specify the desired folder path
+	private String cleanRootFolderSchedule(final String folderPath) throws IOException {
 
 		final var folder = Path.of(folderPath);
 		if (Files.exists(folder)) {
@@ -164,16 +166,15 @@ public class BacklogService implements BacklogBehavior {
 		return folderPath;
 	}
 
-	@SuppressWarnings("static-access")
 	private String genSchedule(final List<PjjyujiDetail> pds, final List<BacklogDetail> bis) throws IOException {
 		log.debug("Xử lý tạo file schedule !!!");
 		log.debug("Bắt đầu xử lý.");
 		final var projectMap = getMapProject(pds, bis);
 
-		final var util = new BacklogExcel();
+		final var util = new BacklogExcel(LocalDateTime.now());
 
 		if (!util.isUpdateOldSchedule()) {
-			cleanRootFolderSchedule();
+			cleanRootFolderSchedule(util.getPathRootFolder());
 		}
 
 		for (final Map.Entry<Pair<CustomerTarget, String>, Pair<List<PjjyujiDetail>, List<BacklogDetail>>> entry : projectMap
@@ -232,6 +233,16 @@ public class BacklogService implements BacklogBehavior {
 		}
 	}
 
+	public static String getLastFolderName(final String folderPath) {
+		// Tách folder path thành các phần tử
+		final var folders = folderPath.split(Pattern.quote(File.separator));
+
+		// Lấy tên thư mục cuối cùng
+		final var lastFolderName = folders[folders.length - 1];
+
+		return lastFolderName;
+	}
+
 	public ResponseEntity<InputStreamResource> zipFolder(final String folderPath) {
 		log.debug("Bắt đầu xử lý tạo zip file !!!");
 		if (StringUtils.isBlank(folderPath)) {
@@ -243,9 +254,12 @@ public class BacklogService implements BacklogBehavior {
 			final var inputStream = new ByteArrayInputStream(byteArrayOutputStream.toByteArray());
 			final var resource = new InputStreamResource(inputStream);
 
+			// Construct the new file name
+			final var fileDownloadName = getLastFolderName(folderPath) + ".zip";
+
 			final var headers = new HttpHeaders();
 			headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-			headers.setContentDisposition(ContentDisposition.builder("attachment").filename("download.zip").build());
+			headers.setContentDisposition(ContentDisposition.builder("attachment").filename(fileDownloadName).build());
 			log.debug("Kết thúc xử lý zip file !!!");
 			return new ResponseEntity<>(resource, headers, HttpStatus.OK);
 		} catch (final IOException e) {
@@ -293,11 +307,15 @@ public class BacklogService implements BacklogBehavior {
 			final var pjCdJp = bd.getPjCdJp();
 			final var cusTarget = resolveTarget(bd);
 			// for test
-//			if (!cusTarget.equals(CustomerTarget.NONE) || !StringUtils.equals("05000189", pjCdJp)) {
-//				// 05000189
-//				// 03010776
+//			final String[] listAccept = { "05000271", "03010939", "03010931", "03010737", "03010933", "05000309",
+//					"03010791", "03010823", "", "03007954", "03008756" };
+			final String[] listAccept = { "05000271" };
+			final List<String> myList = Arrays.asList(listAccept);
+
+			if (!myList.contains(pjCdJp)) {
 //				continue;
-//			}
+			}
+
 			final Pair<CustomerTarget, String> projectKey = Pair.of(cusTarget, pjCdJp);
 			List<PjjyujiDetail> pdList = new ArrayList<>();
 			List<BacklogDetail> bdList = new ArrayList<>();
@@ -434,6 +452,10 @@ public class BacklogService implements BacklogBehavior {
 				result.add(detail);
 			}
 		}
+		log.debug("List project in working report !!");
+		result.stream().map(x -> Pair.of(x.getPjCd(), x.getPjCdJp())).distinct().forEachOrdered(k -> {
+			log.debug("Project: {}-{}", k.getKey(), k.getValue());
+		});
 		return result;
 	}
 
@@ -641,7 +663,34 @@ public class BacklogService implements BacklogBehavior {
 				result.add(getRecord(columnValues));
 			}
 		}
+		printBacklogGroupByAssign(result);
 		return result;
+	}
+
+	private void printBacklogGroupByAssign(final List<BacklogDetail> result) {
+		final Map<String, List<String>> pjCdJpByMailId = result.stream().collect(Collectors.groupingBy(
+				BacklogDetail::getMailId, Collectors.mapping(BacklogDetail::getPjCdJp, Collectors.toList())));
+
+		for (final Map.Entry<String, List<String>> entry : pjCdJpByMailId.entrySet()) {
+			final var mailId = entry.getKey();
+			final var pjCdJpList = entry.getValue().stream().distinct().toList();
+			log.debug("MailId: \"{}\"", mailId);
+			log.debug("pjCdJp List: {}",
+					pjCdJpList.stream().map(p -> "\"" + p + "\"").collect(Collectors.joining(", ")));
+
+			switch (pjCdJpList.size()) {
+			case 0:
+				log.info("No pjCdJp items found for mailId: {}", mailId);
+				break;
+			case 1:
+				log.info("1 pjCdJp item found for mailId: {}", mailId);
+				break;
+			default:
+				log.info("{} pjCdJp items found for mailId: {}", pjCdJpList.size(), mailId);
+				break;
+			}
+
+		}
 	}
 
 	private List<BacklogDetail> readBacklogIssues(final MultipartFile file)

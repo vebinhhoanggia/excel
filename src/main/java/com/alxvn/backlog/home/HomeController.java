@@ -3,6 +3,7 @@
  */
 package com.alxvn.backlog.home;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -32,7 +33,7 @@ public class HomeController {
 
 	@GetMapping("stastics")
 	public String stastics() {
-		final var util = new BacklogExcel();
+		final var util = new BacklogExcel(LocalDateTime.now());
 		final var wrPath = "templates/pjjyuji_data_csv_20240415.csv";
 		final var backlogPath = "templates/Backlog-Issues-20240415-1157.csv";
 		util.createScheduleFromBacklog(wrPath, backlogPath);

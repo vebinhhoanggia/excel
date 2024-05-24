@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -23,6 +24,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
@@ -37,16 +39,13 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.poi.openxml4j.util.ZipSecureFile;
 import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.CellValue;
 import org.apache.poi.ss.usermodel.DataFormatter;
-import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.HorizontalAlignment;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.ss.util.CellReference;
-import org.apache.poi.ss.util.NumberToTextConverter;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -101,6 +100,7 @@ public class BacklogExcel implements GenSchedule {
 	private static final int COLUMN_START_DATE_INPUT_IDX = CellReference
 			.convertColStringToIndex(COL_TEMPLATE_START_DATE);
 	private static final DateTimeFormatter FORMATTER_YYYYMMDD = DateTimeFormatter.ofPattern("yyyy/MM/dd");
+	private static final DateTimeFormatter FORMATTER_YYYYMMDDHHMMSS = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
 	private static final String TEMPLATE_FILE = "QDA-0222a_プロジェクト管理表_{projectCd}_{range}.xlsm";
 	private static final String TEMPLATE_TOTAL_ACT_HOURS = "SUM({cNameS}{rIdx}:{cNameE}{rIdx})";
@@ -109,29 +109,37 @@ public class BacklogExcel implements GenSchedule {
 	private static final String SCHEDULE_TEMPLATE_PATH = "templates/QDA-0222a_プロジェクト管理表.xlsm";
 
 	private static final String PATH_ROOT_FOLDER = "D:\\Doc\\Backlog";
-	private static final String PATH_SYM_TEMPLATE = "%s\\sym\\%s";
-	private static final String PATH_IFRONT_TEMPLATE = "%s\\ifront\\%s";
-	private static final String PATH_DMP_TEMPLATE = "%s\\dmp\\%s";
-	private static final String PATH_DEFAULT_TEMPLATE = "%s\\default\\%s";
+	private static final String PATH_SYM_TEMPLATE = "%s\\Target_%s\\sym\\%s";
+	private static final String PATH_IFRONT_TEMPLATE = "%s\\Target_%s\\ifront\\%s";
+	private static final String PATH_DMP_TEMPLATE = "%s\\Target_%s\\dmp\\%s";
+	private static final String PATH_DEFAULT_TEMPLATE = "%s\\Target_%s\\default\\%s";
 
-	public static String getPathRootFolder() {
-		return PATH_ROOT_FOLDER;
+	private final String executeTime;
+	private String targetFolder = null;
+
+	public BacklogExcel(final LocalDateTime now) {
+		executeTime = now.format(FORMATTER_YYYYMMDDHHMMSS);
+		targetFolder = String.format("%s\\Target_%s", PATH_ROOT_FOLDER, executeTime);
 	}
 
-	public static String getSymTemplatePath(final String fileName) {
-		return String.format(PATH_SYM_TEMPLATE, PATH_ROOT_FOLDER, fileName);
+	public String getPathRootFolder() {
+		return targetFolder;
 	}
 
-	public static String getiFrontTemplatePath(final String fileName) {
-		return String.format(PATH_IFRONT_TEMPLATE, PATH_ROOT_FOLDER, fileName);
+	public String getSymTemplatePath(final String projectCd) {
+		return String.format(PATH_SYM_TEMPLATE, PATH_ROOT_FOLDER, executeTime, projectCd);
 	}
 
-	public static String getDmpTemplatePath(final String fileName) {
-		return String.format(PATH_DMP_TEMPLATE, PATH_ROOT_FOLDER, fileName);
+	public String getiFrontTemplatePath(final String projectCd) {
+		return String.format(PATH_IFRONT_TEMPLATE, PATH_ROOT_FOLDER, executeTime, projectCd);
 	}
 
-	public static String getDefaultTemplatePath(final String fileName) {
-		return String.format(PATH_DEFAULT_TEMPLATE, PATH_ROOT_FOLDER, fileName);
+	public String getDmpTemplatePath(final String projectCd) {
+		return String.format(PATH_DMP_TEMPLATE, PATH_ROOT_FOLDER, executeTime, projectCd);
+	}
+
+	public String getDefaultTemplatePath(final String projectCd) {
+		return String.format(PATH_DEFAULT_TEMPLATE, PATH_ROOT_FOLDER, executeTime, projectCd);
 	}
 
 	private boolean compareCellRangeAddresses(final CellRangeAddress range1, final CellRangeAddress range2) {
@@ -167,54 +175,6 @@ public class BacklogExcel implements GenSchedule {
 				}
 			}
 		}
-	}
-
-	public String getCellValue(final Cell cell) {
-		if (cell == null) {
-			return "";
-		}
-
-		String cellValue;
-		switch (cell.getCellType()) {
-		case STRING:
-			cellValue = cell.getStringCellValue();
-			break;
-		case NUMERIC:
-			if (DateUtil.isCellDateFormatted(cell)) {
-				cellValue = cell.getDateCellValue().toString();
-			} else {
-				cellValue = NumberToTextConverter.toText(cell.getNumericCellValue());
-			}
-			break;
-		case BOOLEAN:
-			cellValue = String.valueOf(cell.getBooleanCellValue());
-			break;
-		case FORMULA:
-			cellValue = evaluateFormulaCell(cell);
-			break;
-		case BLANK:
-			cellValue = "";
-			break;
-		default:
-			cellValue = "";
-		}
-
-		return cellValue;
-	}
-
-	private String evaluateFormulaCell(final Cell cell) {
-		final var formulaEvaluator = cell.getSheet().getWorkbook().getCreationHelper().createFormulaEvaluator();
-		final var cellValue = formulaEvaluator.evaluate(cell);
-		return getCellValueFromFormulaResult(cellValue);
-	}
-
-	private String getCellValueFromFormulaResult(final CellValue cellValue) {
-		return switch (cellValue.getCellType()) {
-		case STRING -> cellValue.getStringValue();
-		case NUMERIC -> NumberToTextConverter.toText(cellValue.getNumberValue());
-		case BOOLEAN -> String.valueOf(cellValue.getBooleanValue());
-		default -> "";
-		};
 	}
 
 	private void setDefaultValForRow(final Row curRow) {
@@ -579,7 +539,7 @@ public class BacklogExcel implements GenSchedule {
 	 * @param args
 	 */
 	public static void main(final String[] args) {
-		final var obj = new BacklogExcel();
+		final var obj = new BacklogExcel(LocalDateTime.now());
 		final var wrPath = "templates/pjjyuji_data_csv_20240509.csv";
 		final var backlogPath = "templates/Backlog-Issues-20240514-1217.csv";
 		obj.createScheduleFromBacklog(wrPath, backlogPath);
@@ -619,9 +579,11 @@ public class BacklogExcel implements GenSchedule {
 		}
 	}
 
-	private final Predicate<BacklogDetail> isBacklogDetail = b -> !StringUtils.equals(b.getParentKey(), b.getKey());
+	private final Predicate<BacklogDetail> isBacklogDetail = b -> Objects.nonNull(b)
+			&& !StringUtils.equals(b.getParentKey(), b.getKey());
 
-	private final Predicate<BacklogDetail> isBacklogParent = b -> StringUtils.isBlank(b.getParentKey());
+	private final Predicate<BacklogDetail> isBacklogParent = b -> Objects.nonNull(b)
+			&& StringUtils.isBlank(b.getParentKey());
 
 	private List<BacklogDetail> getTargetBacklogs(final Map<String, List<BacklogDetail>> groupedBacklogs,
 			final String parentKey) {
@@ -645,12 +607,12 @@ public class BacklogExcel implements GenSchedule {
 		groupedBacklogs.entrySet().stream().findFirst()
 				.ifPresent(x -> CollectionUtils.emptyIfNull(x.getValue()).stream().findFirst().ifPresent(k -> {
 					CollectionUtils.emptyIfNull(allWrDatas).stream().findFirst().map(PjjyujiDetail::getPjCd)
-							.ifPresent(val -> {
+							.filter(StringUtils::isNotBlank).ifPresent(val -> {
 								// PJCODE :
 								final var col = getCol(sheet, ROW_PJ_NO_IDX, COL_PJ_NO_IDX);
 								col.setCellValue(val);
 							});
-					Optional.of(k).map(BacklogDetail::getPjCdJp).ifPresent(val -> {
+					Optional.of(k).map(BacklogDetail::getPjCdJp).filter(StringUtils::isNotBlank).ifPresent(val -> {
 						// PJ-NO ：
 						final var col = getCol(sheet, ROW_PJ_CD_IDX, COL_PJ_NO_IDX);
 						col.setCellValue(val);
@@ -1000,8 +962,35 @@ public class BacklogExcel implements GenSchedule {
 			indexNo.incrementAndGet();
 		}
 
+		fillTotalPic(sheet, allWrDatas);
+
 		evaluate(workbook, sheet);
 
+	}
+
+	private void fillTotalPic(final Sheet sheet, final List<PjjyujiDetail> allWrDatas) {
+		for (final Row row : sheet) {
+			if (isTotalRow(row)) {
+				final var pics = allWrDatas.stream().map(PjjyujiDetail::getMailId).distinct().sorted()
+						.collect(Collectors.toList());
+				final var aiIdx = new AtomicInteger(row.getRowNum());
+				while (CollectionUtils.isNotEmpty(pics)) {
+					final var targetCell = sheet.getRow(aiIdx.incrementAndGet())
+							.getCell(CellReference.convertColStringToIndex(COLUMN_TOTAL_CHARACTER));
+					final var val = ScheduleHelper.getCellValueAsString(targetCell);
+					if (StringUtils.isNotBlank(val)) {
+						if (!pics.contains(val)) {
+							continue;
+						}
+						pics.removeIf(x -> StringUtils.equals(x, val));
+					} else {
+						targetCell.setCellValue(pics.get(0));
+						pics.remove(0);
+					}
+				}
+				break;
+			}
+		}
 	}
 
 	private void evaluate(final Workbook workbook, final Sheet sheet) {
@@ -1169,8 +1158,8 @@ public class BacklogExcel implements GenSchedule {
 		case DMP -> PATH_DMP_TEMPLATE;
 		default -> PATH_DEFAULT_TEMPLATE;
 		};
-
-		final var projectSchPath = Paths.get(String.format(projectScheduleTemplate, PATH_ROOT_FOLDER, projectCd));
+		final var projectSchPath = Paths
+				.get(String.format(projectScheduleTemplate, PATH_ROOT_FOLDER, executeTime, projectCd));
 		if (!Files.exists(projectSchPath)) {
 			Files.createDirectories(projectSchPath);
 		}
@@ -1271,7 +1260,7 @@ public class BacklogExcel implements GenSchedule {
 
 	@Override
 	public boolean isUpdateOldSchedule() {
-		return true;
+		return false;
 	}
 
 	private Map<String, List<BacklogDetail>> groupByParentKey(final List<BacklogDetail> details) {

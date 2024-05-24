@@ -26,14 +26,14 @@ public class Helper {
 			return StringUtils.defaultString(matcherRedmine.group(0));
 		}
 		// use for backlog sym
-		final var backlogSymPattern = "(SYMPHO-\\d+(#comment-\\d+)?)";
+		final var backlogSymPattern = "(SYMPHO-\\d+((\\S+)comment-\\d+)?)";
 		final var patternBacklog = Pattern.compile(backlogSymPattern);
 		final var matcherSymBacklog = patternBacklog.matcher(content);
 		if (matcherSymBacklog.find()) {
 			return StringUtils.defaultString(matcherSymBacklog.group(1));
 		}
 		// use for backlog ifront
-		final var backlogifrontPattern = "(IFRONT-\\d+(#comment-\\d+)?)";
+		final var backlogifrontPattern = "(IFRONT-\\d+((\\S+)comment-\\d+)?)";
 		final var patternIFrontBacklog = Pattern.compile(backlogifrontPattern);
 		final var matcherIfrontBacklog = patternIFrontBacklog.matcher(content);
 		if (matcherIfrontBacklog.find()) {

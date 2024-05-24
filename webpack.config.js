@@ -1,4 +1,5 @@
-var path = require('path');
+const path = require('path');
+const webpack = require('webpack');
 
 module.exports = {
     entry: './src/main/js/app.js',
@@ -26,5 +27,11 @@ module.exports = {
 				use: ['style-loader', 'css-loader']
 			}
 		]
-	}
+	},
+    plugins: [
+        new webpack.DefinePlugin({
+          'process.env.NODE_ENV': JSON.stringify('production'),
+          'API_CONTEXT': JSON.stringify('backlog')
+        })
+    ]
 };

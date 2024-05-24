@@ -22,8 +22,19 @@ import { Audio } from 'react-loader-spinner';
 
 const FormItem = Form.Item;
 // Create an Axios instance with the base URL
+let apiContextPath = '';
+if (process.env.NODE_ENV === 'production') {
+	console.log('Running in production mode');
+	console.log('API_CONTEXT value:', API_CONTEXT);
+	apiContextPath = API_CONTEXT;
+} else {
+	console.log('Running in development mode');
+	console.log('API_CONTEXT value:', '');
+	apiContextPath = '';
+}
+
 const api = axios.create({
-	baseURL: "/backlogApp/api/v1", // Set the base URL to match the configured base path in Spring
+	baseURL: `${apiContextPath ? '/' + apiContextPath : ''}/api/v1`, // Set the base URL to match the configured base path in Spring
 });
 
 // tag::app[]
@@ -125,7 +136,7 @@ class GenSchedule extends React.Component {
 						},
 					};
 					this.openModalInfo(config);
-					
+
 					// const blob = new Blob([response.data], { type: response.headers['content-type'] });
 					const filename = this.extractFileName(
 						response.headers["content-disposition"]
@@ -320,6 +331,19 @@ class GenSchedule extends React.Component {
 									generate
 								</Button>
 							</FormItem>
+						</Col>
+						<Col span={9}>
+							<div className="form-explanation">
+								<h3>Chú thích</h3>
+								<ul>
+									<li>
+										<strong>Pjjyuji:</strong> File thông tin working report. Được export từ http://192.168.10.89/pjjyujidatacsv.
+									</li>
+									<li>
+										<strong>Issues:</strong> File thông tin schedule backlog. Được export theo định dạng csv.
+									</li>
+								</ul>
+							</div>
 						</Col>
 					</Row>
 				</Form>
