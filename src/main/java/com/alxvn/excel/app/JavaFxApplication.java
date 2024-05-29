@@ -1,15 +1,19 @@
 package com.alxvn.excel.app;
 
+import org.springframework.stereotype.Component;
+
 import javafx.application.Application;
+import javafx.fxml.FXMLLoader;
+import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Label;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
 
+@Component
 public class JavaFxApplication extends Application {
 
-	@Override
-	public void start(Stage primaryStage) {
+	public void start_(Stage primaryStage) {
 		// Create a label
 		Label label = new Label("Hello, JavaFX!");
 
@@ -23,6 +27,21 @@ public class JavaFxApplication extends Application {
 		// Set the scene on the primary stage and show it
 		primaryStage.setScene(scene);
 		primaryStage.setTitle("JavaFX Application");
+		primaryStage.show();
+	}
+
+	@Override
+	public void start(Stage primaryStage) throws Exception {
+		// Load the FXML file
+		FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/javafx/javafx-view.fxml"));
+		Parent root = fxmlLoader.load();
+
+		// Create the scene
+		Scene scene = new Scene(root);
+
+		// Set the stage title and scene, and show the stage
+		primaryStage.setTitle("JavaFX Application");
+		primaryStage.setScene(scene);
 		primaryStage.show();
 	}
 
