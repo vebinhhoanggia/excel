@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jnlp spec="1.0+" codebase="http://192.168.10.6:6161/ExcelApp/">
+  <information>
+    <title>Your App</title>
+    <vendor>Your Company</vendor>
+    <homepage href="http://your-company.com"/>
+    <description>Description of your application</description>
+  </information>
+  
+  <security>
+    <all-permissions/>
+  </security>
+
+  <resources>
+    <j2se version="21+" />
+    <jar href="excel.jar" main="true" />
+  </resources>
+
+  <application-desc main-class="com.alxvn.excel.MyApplication">
+  </application-desc>
+</jnlp>
