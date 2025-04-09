@@ -20,6 +20,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -78,7 +79,7 @@ public class ExcelOperationService {
 	}
 
 	public String getFileName(MultipartFile file) {
-	    final String originalFileName = file.getOriginalFilename();
+		final String originalFileName = file.getOriginalFilename();
 
 //	    if (org.springframework.util.StringUtils.hasText(originalFileName)) {
 //	        try {
@@ -94,7 +95,7 @@ public class ExcelOperationService {
 //	        }
 //	    }
 
-	    return originalFileName;
+		return originalFileName;
 
 	}
 
@@ -114,6 +115,7 @@ public class ExcelOperationService {
 		});
 		System.out.println("All files and directories within the folder have been deleted.");
 	}
+
 	public ResponseEntity<InputStreamResource> uploadAndSplitExcelFiles(
 			@RequestParam("files") List<MultipartFile> files, double perSheetInFile) throws IOException {
 		System.out.println("Bắt đầu xử lý");
@@ -237,15 +239,16 @@ public class ExcelOperationService {
 				}
 			}
 			String rsFileName = "KetQuaChay.txt";
-			  // Construct the file path
-            Path filePath = Paths.get(pathStr, rsFileName);
+			// Construct the file path
+			Path filePath = Paths.get(pathStr, rsFileName);
 
-            // Write the content to the file
-            try (PrintWriter writer = new PrintWriter(Files.newBufferedWriter(filePath))) {
-                writer.write(StringUtils.defaultIfBlank(errors.stream().collect(Collectors.joining(", ")), "NO ERROR!"));
-            }
-            System.out.println("File created: " + filePath.toString());
-            
+			// Write the content to the file
+			try (PrintWriter writer = new PrintWriter(Files.newBufferedWriter(filePath))) {
+				writer.write(
+						StringUtils.defaultIfBlank(errors.stream().collect(Collectors.joining(", ")), "NO ERROR!"));
+			}
+			System.out.println("File created: " + filePath.toString());
+
 			System.out.println("Kết thúc xử lý");
 			log.debug("Kết thúc xử lý");
 
@@ -361,4 +364,136 @@ public class ExcelOperationService {
 		return fileName.substring(dotIndex);
 	}
 
+	/**
+	 * Counts merged cells with numerical content in Excel files within a directory
+	 * and its subdirectories. Only considers merged cells from Z8-Z11 and beyond.
+	 *
+	 * @param directoryPath Path to the directory containing Excel files
+	 * @return The total count of merged cells that can be converted to numbers
+	 * @throws IOException If there's an error reading files or directories
+	 */
+	public int countNumericMergedCells(String directoryPath) throws IOException {
+		log.debug("Starting to count numeric merged cells in directory: {}", directoryPath);
+		final Path startPath = Paths.get(directoryPath);
+
+		if (!Files.exists(startPath)) {
+			log.error("Directory does not exist: {}", directoryPath);
+			throw new IOException("Directory does not exist: " + directoryPath);
+		}
+
+		final int columnZIndex = CellReference.convertColStringToIndex("Z");
+		final int startRowIndex = 7; // 0-based index for row 8
+		final int endRowIndex = 10; // 0-based index for row 8
+
+		final AtomicInteger totalCount = new AtomicInteger(0);
+
+		Files.walkFileTree(startPath, new SimpleFileVisitor<Path>() {
+			@Override
+			public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+				String fileName = file.getFileName().toString().toLowerCase();
+				if (fileName.endsWith(".xlsx") || fileName.endsWith(".xls")) {
+					log.debug("Processing Excel file: {}", file);
+					try (Workbook workbook = WorkbookFactory.create(file.toFile())) {
+						for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
+							Sheet sheet = workbook.getSheetAt(i);
+
+							// Get all merged regions in the sheet
+							for (int j = 0; j < sheet.getNumMergedRegions(); j++) {
+								org.apache.poi.ss.util.CellRangeAddress mergedRegion = sheet.getMergedRegion(j);
+
+								// Check if the merged region starts at or after column Z and from row 8
+								if (mergedRegion.getFirstColumn() >= columnZIndex
+										&& mergedRegion.getFirstRow() >= startRowIndex
+										&& mergedRegion.getLastRow() <= endRowIndex) {
+
+									// Get the top-left cell of the merged region
+									Row row = sheet.getRow(mergedRegion.getFirstRow());
+									if (row != null) {
+										Cell cell = row.getCell(mergedRegion.getFirstColumn());
+										if (cell != null) {
+											String cellValue = ScheduleHelper.getCellValueAsString(cell);
+											if (isNumeric(cellValue)) {
+												totalCount.incrementAndGet();
+												log.debug("Found numeric merged cell in sheet {}, value: {}",
+														sheet.getSheetName(), cellValue);
+											}
+										}
+									}
+								}
+							}
+						}
+					} catch (Exception e) {
+						log.error("Error processing file: {}", file, e);
+					}
+				}
+				return FileVisitResult.CONTINUE;
+			}
+
+			@Override
+			public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+				log.error("Failed to access file: {}", file, exc);
+				return FileVisitResult.CONTINUE;
+			}
+		});
+
+		log.debug("Total numeric merged cells count: {}", totalCount.get());
+		return totalCount.get();
+	}
+
+	/**
+ * Checks if a string can be parsed as a number, including Japanese full-width numerals.
+ *
+ * @param str String to check
+ * @return True if the string can be parsed as a number, false otherwise
+ */
+private boolean isNumeric(String str) {
+    if (StringUtils.isBlank(str)) {
+        return false;
+    }
+
+    String trimmed = str.trim();
+    
+    // Convert Japanese full-width numerals to half-width
+    String normalized = normalizeJapaneseNumerals(trimmed);
+    
+    try {
+        Double.parseDouble(normalized);
+        return true;
+    } catch (NumberFormatException e) {
+        return false;
+    }
+}
+
+/**
+ * Normalizes Japanese full-width numerals to standard half-width numerals.
+ * Converts characters like "１２３４５" to "12345"
+ *
+ * @param input String that may contain Japanese full-width numerals
+ * @return String with full-width numerals converted to half-width
+ */
+private String normalizeJapaneseNumerals(String input) {
+    if (input == null) {
+        return null;
+    }
+    
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < input.length(); i++) {
+        char c = input.charAt(i);
+        // Full-width numerals in Unicode range from U+FF10 to U+FF19
+        if (c >= '０' && c <= '９') {
+            // Convert to regular ASCII numeral
+            sb.append((char) (c - '０' + '0'));
+        } else if (c == '．') {
+            // Handle full-width decimal point
+            sb.append('.');
+        } else if (c == '－' || c == '−') {
+            // Handle full-width minus sign variants
+            sb.append('-');
+        } else {
+            // Keep other characters as is
+            sb.append(c);
+        }
+    }
+    return sb.toString();
+}
 }
