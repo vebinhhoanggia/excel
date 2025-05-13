@@ -441,59 +441,101 @@ public class ExcelOperationService {
 	}
 
 	/**
- * Checks if a string can be parsed as a number, including Japanese full-width numerals.
- *
- * @param str String to check
- * @return True if the string can be parsed as a number, false otherwise
- */
-private boolean isNumeric(String str) {
-    if (StringUtils.isBlank(str)) {
-        return false;
-    }
+	 * Counts merged cells with numerical content in Excel files for each
+	 * subdirectory within the given directory. Only considers merged cells from
+	 * Z8-Z11 and beyond.
+	 *
+	 * @param directoryPath Path to the parent directory
+	 * @return A list of subdirectory names and their corresponding numeric merged
+	 *         cell counts
+	 * @throws IOException If there's an error reading files or directories
+	 */
+	public List<Pair<String, Integer>> countNumericMergedCellsBySubdirectory(String directoryPath) throws IOException {
+		log.debug("Starting to count numeric merged cells by subdirectory in: {}", directoryPath);
+		final Path parentPath = Paths.get(directoryPath);
 
-    String trimmed = str.trim();
-    
-    // Convert Japanese full-width numerals to half-width
-    String normalized = normalizeJapaneseNumerals(trimmed);
-    
-    try {
-        Double.parseDouble(normalized);
-        return true;
-    } catch (NumberFormatException e) {
-        return false;
-    }
-}
+		if (!Files.exists(parentPath)) {
+			log.error("Directory does not exist: {}", directoryPath);
+			throw new IOException("Directory does not exist: " + directoryPath);
+		}
 
-/**
- * Normalizes Japanese full-width numerals to standard half-width numerals.
- * Converts characters like "１２３４５" to "12345"
- *
- * @param input String that may contain Japanese full-width numerals
- * @return String with full-width numerals converted to half-width
- */
-private String normalizeJapaneseNumerals(String input) {
-    if (input == null) {
-        return null;
-    }
-    
-    StringBuilder sb = new StringBuilder();
-    for (int i = 0; i < input.length(); i++) {
-        char c = input.charAt(i);
-        // Full-width numerals in Unicode range from U+FF10 to U+FF19
-        if (c >= '０' && c <= '９') {
-            // Convert to regular ASCII numeral
-            sb.append((char) (c - '０' + '0'));
-        } else if (c == '．') {
-            // Handle full-width decimal point
-            sb.append('.');
-        } else if (c == '－' || c == '−') {
-            // Handle full-width minus sign variants
-            sb.append('-');
-        } else {
-            // Keep other characters as is
-            sb.append(c);
-        }
-    }
-    return sb.toString();
-}
+		// List to store results
+		List<Pair<String, Integer>> results = new ArrayList<>();
+
+		// Get immediate subdirectories only
+		Files.list(parentPath).filter(Files::isDirectory).forEach(subDir -> {
+			try {
+				int count = countNumericMergedCells(subDir.toString());
+				String dirName = subDir.getFileName().toString();
+				results.add(Pair.of(dirName, count));
+				log.debug("Subdirectory '{}': {} numeric merged cells", dirName, count);
+			} catch (IOException e) {
+				log.error("Error processing subdirectory: {}", subDir, e);
+			}
+		});
+
+		// Sort results by directory name
+		results.sort((pair1, pair2) -> pair1.getKey().compareTo(pair2.getKey()));
+
+		log.debug("Completed counting numeric merged cells in {} subdirectories", results.size());
+		return results;
+	}
+
+	/**
+	 * Checks if a string can be parsed as a number, including Japanese full-width
+	 * numerals.
+	 *
+	 * @param str String to check
+	 * @return True if the string can be parsed as a number, false otherwise
+	 */
+	private boolean isNumeric(String str) {
+		if (StringUtils.isBlank(str)) {
+			return false;
+		}
+
+		String trimmed = str.trim();
+
+		// Convert Japanese full-width numerals to half-width
+		String normalized = normalizeJapaneseNumerals(trimmed);
+
+		try {
+			Double.parseDouble(normalized);
+			return true;
+		} catch (NumberFormatException e) {
+			return false;
+		}
+	}
+
+	/**
+	 * Normalizes Japanese full-width numerals to standard half-width numerals.
+	 * Converts characters like "１２３４５" to "12345"
+	 *
+	 * @param input String that may contain Japanese full-width numerals
+	 * @return String with full-width numerals converted to half-width
+	 */
+	private String normalizeJapaneseNumerals(String input) {
+		if (input == null) {
+			return null;
+		}
+
+		StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < input.length(); i++) {
+			char c = input.charAt(i);
+			// Full-width numerals in Unicode range from U+FF10 to U+FF19
+			if (c >= '０' && c <= '９') {
+				// Convert to regular ASCII numeral
+				sb.append((char) (c - '０' + '0'));
+			} else if (c == '．') {
+				// Handle full-width decimal point
+				sb.append('.');
+			} else if (c == '－' || c == '−') {
+				// Handle full-width minus sign variants
+				sb.append('-');
+			} else {
+				// Keep other characters as is
+				sb.append(c);
+			}
+		}
+		return sb.toString();
+	}
 }

@@ -5,9 +5,11 @@ package com.alxvn.excel.home;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -41,6 +43,11 @@ public class BaseController {
 	@ResponseBody
 	public int countAllTC() throws IOException {
 		return excelService.countNumericMergedCells("\\\\192.168.10.40\\Training\\Enercom\\Ngantl\\テストチェックリスト");
+	}
+	@GetMapping("/countEcTcByPath")
+	@ResponseBody
+	public List<Pair<String, Integer>> countAllTCByPath() throws IOException {
+		return excelService.countNumericMergedCellsBySubdirectory("\\\\192.168.10.40\\Training\\Enercom\\Ngantl\\テストチェックリスト");
 	}
 
 }
